@@ -27,7 +27,7 @@ Example stack shell: [`monolith.run.ts`](./monolith.run.ts) at repo root.
 
 ## Milestone 1 (current)
 
-**M1-GITLAB-DOGFOOD** — import → plan → deploy → typed bindings on one small GitLab-hosted Worker app (design partner #1 = self).
+**M1-GITHUB-DOGFOOD** — import → plan → deploy → typed bindings on one small GitHub-hosted Worker app (design partner #1 = self).
 
 | Goal | Detail |
 | --- | --- |
@@ -36,6 +36,25 @@ Example stack shell: [`monolith.run.ts`](./monolith.run.ts) at repo root.
 | Done when | AC-1..7 pass + friction log filled — see [docs/milestone-1.md](./docs/milestone-1.md) |
 
 Full product spec, DAGs, and Phase 0–2 roadmap: [docs/product-spec.md](./docs/product-spec.md).
+
+### M1 dogfood repo (GitHub)
+
+Monolith CLI is developed here; the **validation app** is a separate private GitHub repo.
+
+| | |
+| --- | --- |
+| Repo name | `monolith-m1-dogfood` |
+| Local path | `~/work/monolith-dogfood` |
+
+Install and authenticate GitHub CLI, then bootstrap:
+
+```bash
+brew install gh   # if `gh` not on PATH
+gh auth login
+```
+
+See [docs/milestone-1.md](./docs/milestone-1.md#dogfood-repo-github) for `gh repo create`, clone, and Wrangler baseline deploy.
+
 
 ## Docs
 

@@ -25,7 +25,7 @@ Build: `pnpm build` (`tsc -b` per package). Typecheck includes `monolith.run.ts`
 
 Build local CLI only (`monolith import|plan|deploy`). Async-first; Effect optional later. Deploy via Wrangler subprocess for M1. Local JSON state at `.monolith/state/<stage>.json` (gitignored).
 
-**Non-goals for M1:** npm publish, preview SaaS, GitLab CI wiring, `destroy`, remote state, AWS/multi-cloud.
+**Non-goals for M1:** npm publish, preview SaaS, GitHub Actions wiring (optional stub), `destroy`, remote state, AWS/multi-cloud.
 
 ## Conventions
 

@@ -75,7 +75,7 @@ Perch is **time + attention + trust** in the deploy graph — devtools, not host
 
 ## Milestone 1 — specification & composition DAGs
 
-**Confirmed:** 2026-06-07 — first validation target is one small GitLab-hosted project (design partner #1 = yourself). **Positioning:** B2D / agency devtools — reputation-first, not Vercel-adjacent hosting or Canva-style creative tooling.
+**Confirmed:** 2026-06-07 — first validation target is one small GitHub-hosted project (design partner #1 = yourself). **Positioning:** B2D / agency devtools — reputation-first, not Vercel-adjacent hosting or Canva-style creative tooling.
 
 **Codename for M1 build:** **Monolith** (`monolith.run.ts`, `monolith import|plan|deploy`). Portfolio memo and YAML stay **Perch** until M1 demo proves the wedge; rename or dual-brand only after friction log.
 
@@ -83,15 +83,15 @@ Perch is **time + attention + trust** in the deploy graph — devtools, not host
 
 | Field | Value |
 | --- | --- |
-| **ID** | `M1-GITLAB-DOGFOOD` |
-| **Name** | GitLab dogfood — import → plan → deploy → typed bindings |
+| **ID** | `M1-GITHUB-DOGFOOD` |
+| **Name** | GitHub dogfood — import → plan → deploy → typed bindings |
 | **Owner** | Founder (design partner #1 = self) |
-| **Target repo profile** | One **small GitLab-hosted** TS Worker app (private OK): existing `wrangler.toml` or `wrangler.jsonc`; **≥2 bindings** from {D1, R2, KV, Queue, DO}; **≥2 stages** worth modeling (e.g. `dev` + `demo` or `dev` + `prod`); single Worker entry + Hono or plain fetch handler; no Pages, no multi-account; fits **≤40h** capped calendar |
+| **Target repo profile** | One **small GitHub-hosted** TS Worker app (private OK): existing `wrangler.toml` or `wrangler.jsonc`; **≥2 bindings** from {D1, R2, KV, Queue, DO}; **≥2 stages** worth modeling (e.g. `dev` + `demo` or `dev` + `prod`); single Worker entry + Hono or plain fetch handler; no Pages, no multi-account; fits **≤40h** capped calendar |
 
 **Preconditions**
 
 - Cloudflare account with API token or OAuth app scoped for Workers + chosen binding types on target zone/account.
-- Target GitLab repo cloned locally; `wrangler deploy` already succeeds on at least one stage (baseline truth).
+- Target GitHub repo cloned locally; `wrangler deploy` already succeeds on at least one stage (baseline truth).
 - Monolith repo (local only — **no public npm/org** until M1 postconditions met).
 - `.env` or shell holds `CLOUDFLARE_API_TOKEN` (or OAuth refresh) — not committed.
 
@@ -111,7 +111,7 @@ Perch is **time + attention + trust** in the deploy graph — devtools, not host
 
 - npm publish, GitHub org, community launch, Product Hunt
 - Perch Cloud / preview SaaS / paid tiers
-- Full GitLab CI template (optional stub only — see appendix)
+- Full GitHub Actions template (optional stub only — see appendix)
 - Second external design partner
 - `destroy`, `dev` watch mode, remote state, PR previews
 - AWS / multi-cloud, `@monolith/effect`, Terraform export
@@ -121,13 +121,13 @@ Perch is **time + attention + trust** in the deploy graph — devtools, not host
 
 | Artifact | Location |
 | --- | --- |
-| `monolith.run.ts` | Target GitLab repo (or local fork) |
+| `monolith.run.ts` | Target GitHub repo (or local fork) |
 | `.monolith/state/<stage>.json` | Local state (gitignored) |
 | Plan/deploy logs | `docs/m1-run-log.txt` or friction log excerpts |
 | Friction log | [milestone-1.md](./milestone-1.md) |
 | Demo script | `docs/m1-demo.md` |
 | Tool source | `~/work/monolith` (private until M1 done) |
-| Optional CI stub | `.gitlab-ci.yml` comment skeleton (appendix) |
+| Optional CI stub | `.github/workflows/monolith.yml` comment skeleton (appendix) |
 
 **Success metrics (reputation play)**
 
@@ -156,7 +156,7 @@ Minimal **nodes** for M1. Each must be verifiable in isolation before compositio
 | **C7** | Deploy / reconcile | Plan diff → Worker live + bindings attached | C2, C3, C4, C5, C6 | Deploy exit 0; CF dashboard matches; wrangler-equivalent route | **L** |
 | **C8** | Typegen: inferred handler `env` | Stack bindings → `.d.ts` or inline generic on handler | C3, C4 | `tsc --noEmit` on dogfood handler without manual `Env` | **M** |
 | **C9** | CLI: `init`, `import`, `plan`, `deploy` | argv + cwd → side effects | C0–C8 | End-to-end script: import → plan → deploy on fixture project | **M** |
-| **C10** | GitLab friction log + demo script | M1 run notes → doc + rehearsed peer demo | C9 | AC-6, AC-7 satisfied | **S** |
+| **C10** | M1 friction log + demo script | M1 run notes → doc + rehearsed peer demo | C9 | AC-6, AC-7 satisfied | **S** |
 
 **M1 binding subset:** implement only types present in target repo **plus** Worker shell. Do not build full Tier-1 matrix from Phase 0 until second dogfood app.
 
@@ -206,7 +206,7 @@ graph TD
 
 ```mermaid
 flowchart TD
-  START([Pick GitLab target repo]) --> C0
+  START([Pick GitHub dogfood repo]) --> C0
   C0[Scaffold Monolith repo + C0] --> C1C2[C1 import + C2 auth parallel]
   C1C2 --> C3C4[C3 Worker + C4 bindings]
   C3C4 --> C5[C5 state engine]
@@ -216,7 +216,7 @@ flowchart TD
   C7 -->|direct API later| DEPLOY
   DEPLOY --> C8[C8 typegen]
   C8 --> C9[C9 CLI polish]
-  C9 --> RUN[Dogfood: import plan deploy on GitLab app]
+  C9 --> RUN[Dogfood: import plan deploy on GitHub dogfood app]
   RUN --> LOG[C10 friction log + demo]
   LOG --> DONE([M1 done — AC-1..7])
 
@@ -227,7 +227,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A[Clone GitLab dogfood repo] --> B[Install local Monolith CLI]
+  A[Clone GitHub dogfood repo] --> B[Install local Monolith CLI]
   B --> C[monolith import wrangler.jsonc]
   C --> D[Review generated monolith.run.ts]
   D --> E[monolith plan --stage dev]
@@ -268,7 +268,7 @@ flowchart TD
 
 | Week | Focus | Exit |
 | --- | --- | --- |
-| **1** | C0, C1, C2, C5; pick GitLab repo; import produces manifest | Import exit 0 on real wrangler file |
+| **1** | C0, C1, C2, C5; pick GitHub repo; import produces manifest | Import exit 0 on real wrangler file |
 | **2** | C3, C4, C6, C7 (dev stage deploy via wrangler subprocess) | AC-3 on dev |
 | **3** | C8, C9, second-stage plan, C10 friction log + demo | AC-1..7 green |
 
@@ -296,9 +296,9 @@ Calendar cap aligns with portfolio rule: do not steal >15% Magpie time — if we
 Copy when marking M1 done:
 
 ```markdown
-## M1 verification — M1-GITLAB-DOGFOOD
+## M1 verification — M1-GITHUB-DOGFOOD
 
-- [ ] AC-1: `monolith import` on GitLab repo wrangler config → valid `monolith.run.ts` (no hand fix)
+- [ ] AC-1: `monolith import` on GitHub repo wrangler config → valid `monolith.run.ts` (no hand fix)
 - [ ] AC-2: `monolith plan --stage dev` shows meaningful first-run diff
 - [ ] AC-3: `monolith deploy --stage dev` → HTTP 200 smoke on configured route
 - [ ] AC-4: Handler env typed; `tsc --noEmit` clean without manual `Env`
@@ -311,26 +311,31 @@ Copy when marking M1 done:
 
 ---
 
-### Appendix — GitLab CI stub (M2-oriented, not required for M1)
+### Appendix — GitHub Actions stub (M2-oriented, not required for M1)
 
 Skeleton only — do not wire until M1 done:
 
 ```yaml
-# .gitlab-ci.yml — Monolith/Perch (enable post-M1)
-# stages: [plan, deploy]
-#
-# plan_on_mr:
-#   stage: plan
-#   rules: [if: $CI_PIPELINE_SOURCE == "merge_request_event"]
-#   script:
-#     - npx @monolith/cli plan --stage dev
-#
-# deploy_main:
-#   stage: deploy
-#   rules: [if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH]
-#   script:
-#     - npx @monolith/cli deploy --stage dev
-#   when: manual
+# .github/workflows/monolith.yml — Monolith/Perch (enable post-M1)
+# name: monolith
+# on:
+#   pull_request:
+#   push:
+#     branches: [main]
+# jobs:
+#   plan:
+#     if: github.event_name == 'pull_request'
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: npx @monolith/cli plan --stage dev
+#   deploy:
+#     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#     runs-on: ubuntu-latest
+#     environment: dev
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: npx @monolith/cli deploy --stage dev
 ```
 
 ---
@@ -554,10 +559,10 @@ perch.run.ts → stages/previews → PM shell (who/when/stage/approve) → Publi
 
 ## Next actions
 
-1. **M1:** Pick one small GitLab project meeting §Milestone 1 target repo profile; run import → plan → `deploy --stage dev`; fill §M1 friction log; complete §6 verification checklist.
+1. **M1:** Pick one small GitHub dogfood repo meeting §Milestone 1 target repo profile; run import → plan → `deploy --stage dev`; fill §M1 friction log; complete §6 verification checklist.
 2. **Do not scaffold public repo** until M1 deploy proven or explicit calendar allocation beyond dogfood cap.
 3. If proceeding beyond M1: `monolith import wrangler.json` / `perch import wrangler.json` on chosen dogfood app.
-4. Append consignment review after M1: `pnpm portfolio:review perch --durability 3 --vector 5 --inheritance 3 --notes "M1 GitLab dogfood …"`.
+4. Append consignment review after M1: `pnpm portfolio:review perch --durability 3 --vector 5 --inheritance 3 --notes "M1 GitHub dogfood …"`.
 5. Re-run domain/npm checks before public launch; file trademark search (Monolith + Perch + Plinth).
 6. Fill M1 friction log in [docs/milestone-1.md](./milestone-1.md) during execution.
 
@@ -569,6 +574,6 @@ perch.run.ts → stages/previews → PM shell (who/when/stage/approve) → Publi
 | --- | --- |
 | 2026-06-07 | Initial memo promoted from Perch/Alchemy research thread; perch.yaml registered in consignment portfolio |
 | 2026-06-07 | Added §Inheritance roadmap (PM · publish-through-product); DVI inheritance notes →4/5 path via previews + PM-on-deploy-records |
-| 2026-06-07 | Confirmed **Milestone 1 — GitLab dogfood** (design partner #1 = self); Monolith leading codename; B2D/agency reputation-first positioning; GitLab CI stub appendix |
+| 2026-06-07 | Confirmed **Milestone 1 — GitHub dogfood** (design partner #1 = self); Monolith leading codename; B2D/agency reputation-first positioning; GitHub Actions stub appendix; M1 target switched from GitLab to GitHub |
 | 2026-06-07 | Added **§Milestone 1 — specification & composition DAGs** — formal contract (AC-1..7), C0–C10 capabilities, 3 mermaid DAGs, critical path, M1 decision defaults, verification checklist |
 | 2026-06-07 | Canonical spec moved to `~/work/monolith/docs/product-spec.md`; planning path is stub redirect |
