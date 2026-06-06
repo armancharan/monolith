@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "monolith-m1-dogfood",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dogfood-db",
+      "database_id": "70b33c81-e63d-44c1-a414-b48aa3e032ec"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "58e35e39e0ba4816b1d5d666898b55be"
+    }
+  ]
+}

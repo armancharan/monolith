@@ -1,16 +1,17 @@
 /**
- * C0 command stubs — C9 wires these to import/plan/deploy engines.
+ * M1 CLI commands — C1 import wired; C9 wires plan/deploy engines.
  */
+import { runImport } from "./import.js"
+
 export type CommandName = "init" | "import" | "plan" | "deploy" | "help"
 
-export function runCommand(name: CommandName, _args: string[]): number {
+export async function runCommand(name: CommandName, args: string[]): Promise<number> {
   switch (name) {
     case "init":
       console.log("monolith init — not implemented (C0 scaffold)")
       return 0
     case "import":
-      console.log("monolith import — not implemented (C1 wrangler parser next)")
-      return 0
+      return runImport(args)
     case "plan":
       console.log("monolith plan — not implemented (C6 plan engine next)")
       return 0
@@ -28,9 +29,9 @@ export function printHelp(): void {
 
 Usage:
   monolith init
-  monolith import <wrangler.toml|wrangler.jsonc>
+  monolith import <wrangler.toml|wrangler.json|wrangler.jsonc>
   monolith plan --stage <name>
   monolith deploy --stage <name>
 
-Commands are stubs until C1+ land.`)
+import reads wrangler config and writes .monolith/import/<hash>.json.`)
 }

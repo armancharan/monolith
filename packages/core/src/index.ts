@@ -1,4 +1,4 @@
-export { MONOLITH_DIR, STATE_DIR, statePath } from "./paths.js"
+export { MONOLITH_DIR, IMPORT_DIR, STATE_DIR, importSnapshotPath, statePath } from "./paths.js"
 export {
   createStackContext,
   stack,

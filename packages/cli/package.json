@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@monolith/cloudflare": "workspace:*",
     "@monolith/core": "workspace:*"
   }
 }
