@@ -73,9 +73,9 @@ Copy when marking M1 done:
 
 | | Notes |
 | --- | --- |
-| **Worked** | C0 scaffold compiles; CLI `--help` lists M1 commands; dogfood repo `wrangler whoami` OAuth OK; D1/KV IDs wired; `wrangler deploy` → `https://monolith-m1-dogfood.armancharan.workers.dev`; **C1** `monolith import wrangler.jsonc` → `.monolith/import/<hash>.json` + `monolith.run.ts` with D1/KV bindings |
-| **Failed** | Cancelled `wrangler login` can leave OAuth callback on `:8976` (kill stale node, retry login); first deploy blocked until workers.dev subdomain registered (non-interactive `no` — use dashboard onboarding or `PUT /accounts/{id}/workers/subdomain`) |
-| **Next** | **C2** auth + CF API client smoke; **C5** local state loader; **C6** plan engine; re-run import with `--force` or overwrite flag once run.ts merge story is defined |
+| **Worked** | C0 scaffold compiles; CLI `--help` lists M1 commands; dogfood repo `wrangler whoami` OAuth OK; D1/KV IDs wired; `wrangler deploy` → `https://monolith-m1-dogfood.armancharan.workers.dev`; **C1** `monolith import wrangler.jsonc` → `.monolith/import/<hash>.json` + `monolith.run.ts` with D1/KV bindings; **C2** `monolith whoami` reads wrangler OAuth / `CLOUDFLARE_API_TOKEN`; **C5** `monolith import --stage dev` + `monolith state init` → `.monolith/state/<stage>.json` |
+| **Failed** | Cancelled `wrangler login` can leave OAuth callback on `:8976` (kill stale node, retry login); plain `npm run deploy` in non-TTY auto-declines workers.dev registration — use [Workers onboarding](https://dash.cloudflare.com/02918ecb84e908a69d7f2f5341f8bfac/workers/onboarding) once, or interactive/`expect` deploy with `--install-skills false` |
+| **Next** | **C6** plan engine; re-run import with `--force` or overwrite flag once run.ts merge story is defined |
 
 ## Artifacts (on done)
 

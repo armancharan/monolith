@@ -1,3 +1,12 @@
+export { resolveCloudflareAuth, CloudflareAuthError, type AuthSource, type ResolvedAuth } from "./auth.js"
+export {
+  CloudflareClient,
+  CloudflareApiError,
+  type CloudflareAccount,
+  type CloudflareUser,
+  type WhoamiResult
+} from "./client.js"
+export { ok, err, type Result } from "./result.js"
 export {
   stack,
   type CloudflareBinding,

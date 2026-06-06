@@ -15,7 +15,15 @@ async function main(): Promise<void> {
     process.exit(0)
   }
 
-  const known = new Set<CommandName>(["init", "import", "plan", "deploy", "help"])
+  const known = new Set<CommandName>([
+    "init",
+    "import",
+    "plan",
+    "deploy",
+    "help",
+    "whoami",
+    "state"
+  ])
   if (!known.has(first as CommandName)) {
     console.error(`Unknown command: ${first}`)
     printHelp()

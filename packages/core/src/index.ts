@@ -1,5 +1,14 @@
 export { MONOLITH_DIR, IMPORT_DIR, STATE_DIR, importSnapshotPath, statePath } from "./paths.js"
 export {
+  initStateFromImport,
+  loadState,
+  saveState,
+  stateFilePath,
+  StateError,
+  type MonolithState,
+  type StateResource
+} from "./state.js"
+export {
   createStackContext,
   stack,
   type StackConfigure,

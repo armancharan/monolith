@@ -1,9 +1,18 @@
 /**
- * M1 CLI commands — C1 import wired; C9 wires plan/deploy engines.
+ * M1 CLI commands — C1 import, C2 whoami, C5 state wired.
  */
 import { runImport } from "./import.js"
+import { runStateInit } from "./state.js"
+import { runWhoami } from "./whoami.js"
 
-export type CommandName = "init" | "import" | "plan" | "deploy" | "help"
+export type CommandName =
+  | "init"
+  | "import"
+  | "plan"
+  | "deploy"
+  | "help"
+  | "whoami"
+  | "state"
 
 export async function runCommand(name: CommandName, args: string[]): Promise<number> {
   switch (name) {
@@ -18,6 +27,14 @@ export async function runCommand(name: CommandName, args: string[]): Promise<num
     case "deploy":
       console.log("monolith deploy — not implemented (C7 deploy next)")
       return 0
+    case "whoami":
+      return runWhoami(args)
+    case "state":
+      if (args[0] === "init") {
+        return runStateInit(args.slice(1))
+      }
+      console.error("Usage: monolith state init --stage <name> [--from <import.json>]")
+      return 1
     case "help":
       printHelp()
       return 0
@@ -29,9 +46,12 @@ export function printHelp(): void {
 
 Usage:
   monolith init
-  monolith import <wrangler.toml|wrangler.json|wrangler.jsonc>
+  monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>]
+  monolith state init --stage <name> [--from .monolith/import/<hash>.json]
+  monolith whoami [--account-id]
   monolith plan --stage <name>
   monolith deploy --stage <name>
 
-import reads wrangler config and writes .monolith/import/<hash>.json.`)
+import reads wrangler config and writes .monolith/import/<hash>.json.
+Pass --stage on import to seed .monolith/state/<stage>.json from the snapshot.`)
 }

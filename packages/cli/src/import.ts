@@ -6,17 +6,40 @@ import {
   toImportSnapshot,
   WranglerParseError
 } from "@monolith/cloudflare"
-import { importSnapshotPath, MONOLITH_DIR } from "@monolith/core"
+import { importSnapshotPath, initStateFromImport, MONOLITH_DIR } from "@monolith/core"
 import { mkdir, readFile, writeFile, access } from "node:fs/promises"
 import { constants } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 
 const RUN_FILE = "monolith.run.ts"
 
+function parseImportArgs(args: string[]): {
+  configArg?: string
+  stage?: string
+} {
+  const parsed: { configArg?: string; stage?: string } = {}
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === "--stage" && args[index + 1]) {
+      parsed.stage = args[index + 1]
+      index += 1
+      continue
+    }
+    if (!arg.startsWith("-") && !parsed.configArg) {
+      parsed.configArg = arg
+    }
+  }
+
+  return parsed
+}
+
 export async function runImport(args: string[]): Promise<number> {
-  const configArg = args[0]
+  const { configArg, stage } = parseImportArgs(args)
   if (!configArg) {
-    console.error("Usage: monolith import <wrangler.toml|wrangler.json|wrangler.jsonc>")
+    console.error(
+      "Usage: monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>]"
+    )
     return 1
   }
 
@@ -69,6 +92,15 @@ export async function runImport(args: string[]): Promise<number> {
     console.log(`Generated ${RUN_FILE}`)
   } else {
     console.log(`Kept existing ${RUN_FILE} (remove it to regenerate from import)`)
+  }
+
+  if (stage) {
+    const stateResult = await initStateFromImport(snapshotRelativePath, stage, projectDir)
+    if (!stateResult.ok) {
+      console.error(stateResult.error.message)
+      return 1
+    }
+    console.log(`Initialized .monolith/state/${stage}.json`)
   }
 
   return 0
