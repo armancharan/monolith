@@ -1,10 +1,17 @@
 # Milestone 1 — GitLab dogfood
 
 **ID:** `M1-GITLAB-DOGFOOD`  
-**Status:** pending  
+**Status:** in progress (C0 landed 2026-06-07)  
 **Full spec:** [product-spec.md](./product-spec.md#milestone-1--specification--composition-dags) (DAGs, C0–C10, decision defaults)
 
 Confirmed 2026-06-07 — first validation target is one small GitLab-hosted project (design partner #1 = yourself). B2D / agency devtools — reputation-first.
+
+
+## C0 progress (2026-06-07)
+
+- Root `monolith.run.ts` async stack shell with commented C2–C7 placeholders
+- pnpm workspace: `packages/core` (`Stack`, `Resource` types), `packages/cli` (`init|import|plan|deploy` stubs)
+- `pnpm monolith --help`, `pnpm typecheck`
 
 ## Contract summary
 
@@ -42,13 +49,11 @@ Copy when marking M1 done:
 
 ## Friction log
 
-*(Fill when M1 execution starts.)*
-
 | | Notes |
 | --- | --- |
-| **Worked** | — |
+| **Worked** | C0 scaffold compiles; CLI `--help` lists M1 commands |
 | **Failed** | — |
-| **Next** | — |
+| **Next** | **C1** — wrangler.toml/jsonc parser + golden-file tests → `StackManifest` |
 
 ## Artifacts (on done)
 

@@ -3,8 +3,27 @@
 TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony or Effect lock-in. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `monolith.run.ts`, get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production.
 
 **Portfolio id:** Perch (experiment) · **M1 codename:** Monolith  
-**Status:** experiment / watch — not portfolio slot one vs Magpie  
+**Status:** C0 scaffold — packages compile; CLI commands stubbed  
 **Positioning:** B2D / agency devtools — reputation-first validation, not Vercel-adjacent hosting or Canva-style creative tooling.
+
+## Quick start (C0)
+
+```bash
+pnpm install
+pnpm build
+pnpm typecheck
+pnpm monolith --help
+```
+
+Requires **Node 24+** (see `.nvmrc`).
+
+| Package | Role |
+| --- | --- |
+| `@monolith/core` | Stack types, `.monolith/state/<stage>.json` path helpers |
+| `@monolith/cloudflare` | CF `stack()` helper, Worker/D1/R2/KV placeholder types |
+| `@monolith/cli` | `monolith` bin — `init`, `import`, `plan`, `deploy` stubbed |
+
+Example stack shell: [`monolith.run.ts`](./monolith.run.ts) at repo root.
 
 ## Milestone 1 (current)
 
