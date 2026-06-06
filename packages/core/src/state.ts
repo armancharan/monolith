@@ -62,6 +62,10 @@ export interface MonolithState {
   importHash?: string
   importSnapshotPath?: string
   wranglerConfigPath?: string
+  /** ISO timestamp of last successful deploy via monolith deploy. */
+  deployedAt?: string
+  /** Worker URL parsed from wrangler deploy output, when available. */
+  workerUrl?: string
 }
 
 export function resourcesFromImport(snapshot: ImportSnapshot): StateResource[] {
