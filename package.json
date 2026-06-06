@@ -1,0 +1,7 @@
+{
+  "name": "@monolith/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript IaC for Cloudflare Workers — M1 scaffold (not published)",
+  "type": "module"
+}
