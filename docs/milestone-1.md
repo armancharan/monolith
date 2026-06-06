@@ -11,7 +11,7 @@ Confirmed 2026-06-07 — first validation target is one small GitHub-hosted proj
 
 | Item | Value |
 | --- | --- |
-| **GitHub repo** | `monolith-m1-dogfood` (private) |
+| **GitHub repo** | [`armancharan/monolith-m1-dogfood`](https://github.com/armancharan/monolith-m1-dogfood) (private) |
 | **Local clone** | `~/work/monolith-dogfood` |
 | **Profile** | Hono (or fetch) Worker; `wrangler.jsonc` with **≥2 bindings** (e.g. D1 + KV); **≥2 stages** in Monolith; baseline `wrangler deploy` succeeds before import |
 
