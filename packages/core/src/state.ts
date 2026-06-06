@@ -31,15 +31,7 @@ export interface StateResource {
   bucketName?: string
 }
 
-export interface MonolithState {
-  stackName: string
-  stage: string
-  resources: StateResource[]
-  updatedAt: string
-  importHash?: string
-}
-
-interface ImportSnapshot {
+export interface ImportSnapshot {
   workerName: string
   contentHash: string
   d1Databases?: Array<{
@@ -62,7 +54,17 @@ interface ImportSnapshot {
   }>
 }
 
-function resourcesFromImport(snapshot: ImportSnapshot): StateResource[] {
+export interface MonolithState {
+  stackName: string
+  stage: string
+  resources: StateResource[]
+  updatedAt: string
+  importHash?: string
+  importSnapshotPath?: string
+  wranglerConfigPath?: string
+}
+
+export function resourcesFromImport(snapshot: ImportSnapshot): StateResource[] {
   const resources: StateResource[] = [
     {
       id: `worker:${snapshot.workerName}`,
@@ -109,6 +111,26 @@ function resourcesFromImport(snapshot: ImportSnapshot): StateResource[] {
   }
 
   return resources
+}
+
+export function stateFromImportSnapshot(
+  snapshot: ImportSnapshot,
+  stage: string,
+  options?: {
+    importSnapshotPath?: string
+    wranglerConfigPath?: string
+    updatedAt?: string
+  }
+): MonolithState {
+  return {
+    stackName: snapshot.workerName,
+    stage,
+    resources: resourcesFromImport(snapshot),
+    updatedAt: options?.updatedAt ?? new Date().toISOString(),
+    importHash: snapshot.contentHash,
+    importSnapshotPath: options?.importSnapshotPath,
+    wranglerConfigPath: options?.wranglerConfigPath
+  }
 }
 
 export function stateFilePath(stage: string, projectDir = process.cwd()): string {
@@ -160,7 +182,8 @@ export async function saveState(
 export async function initStateFromImport(
   importPath: string,
   stage: string,
-  projectDir = process.cwd()
+  projectDir = process.cwd(),
+  options?: { wranglerConfigPath?: string }
 ): Promise<Result<MonolithState, StateError>> {
   const resolvedImportPath = join(projectDir, importPath)
 
@@ -182,13 +205,10 @@ export async function initStateFromImport(
     return err(new StateError(`Import snapshot missing workerName or contentHash: ${importPath}`))
   }
 
-  const state: MonolithState = {
-    stackName: snapshot.workerName,
-    stage,
-    resources: resourcesFromImport(snapshot),
-    updatedAt: new Date().toISOString(),
-    importHash: snapshot.contentHash
-  }
+  const state = stateFromImportSnapshot(snapshot, stage, {
+    importSnapshotPath: importPath,
+    wranglerConfigPath: options?.wranglerConfigPath
+  })
 
   const saveResult = await saveState(stage, state, projectDir)
   if (!saveResult.ok) {

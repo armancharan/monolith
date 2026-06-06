@@ -2,6 +2,7 @@
  * M1 CLI commands — C1 import, C2 whoami, C5 state wired.
  */
 import { runImport } from "./import.js"
+import { runPlan } from "./plan.js"
 import { runStateInit } from "./state.js"
 import { runWhoami } from "./whoami.js"
 
@@ -22,8 +23,7 @@ export async function runCommand(name: CommandName, args: string[]): Promise<num
     case "import":
       return runImport(args)
     case "plan":
-      console.log("monolith plan — not implemented (C6 plan engine next)")
-      return 0
+      return runPlan(args)
     case "deploy":
       console.log("monolith deploy — not implemented (C7 deploy next)")
       return 0

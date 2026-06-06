@@ -2,12 +2,16 @@ export { MONOLITH_DIR, IMPORT_DIR, STATE_DIR, importSnapshotPath, statePath } fr
 export {
   initStateFromImport,
   loadState,
+  resourcesFromImport,
   saveState,
   stateFilePath,
+  stateFromImportSnapshot,
   StateError,
+  type ImportSnapshot,
   type MonolithState,
   type StateResource
 } from "./state.js"
+export { formatPlan, planState, type PlanChange, type PlanResult } from "./plan.js"
 export {
   createStackContext,
   stack,

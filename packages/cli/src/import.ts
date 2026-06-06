@@ -9,7 +9,7 @@ import {
 import { importSnapshotPath, initStateFromImport, MONOLITH_DIR } from "@monolith/core"
 import { mkdir, readFile, writeFile, access } from "node:fs/promises"
 import { constants } from "node:fs"
-import { dirname, join, resolve } from "node:path"
+import { dirname, join, relative, resolve } from "node:path"
 
 const RUN_FILE = "monolith.run.ts"
 
@@ -67,6 +67,7 @@ export async function runImport(args: string[]): Promise<number> {
   }
 
   const projectDir = dirname(configPath)
+  const wranglerConfigPath = relative(projectDir, configPath)
   const contentHash = hashWranglerContent(content)
   const snapshot = toImportSnapshot(result, contentHash)
   const importDir = join(projectDir, MONOLITH_DIR, "import")
@@ -95,7 +96,9 @@ export async function runImport(args: string[]): Promise<number> {
   }
 
   if (stage) {
-    const stateResult = await initStateFromImport(snapshotRelativePath, stage, projectDir)
+    const stateResult = await initStateFromImport(snapshotRelativePath, stage, projectDir, {
+      wranglerConfigPath
+    })
     if (!stateResult.ok) {
       console.error(stateResult.error.message)
       return 1
