@@ -1,7 +1,7 @@
 # Milestone 1 — GitHub dogfood
 
 **ID:** `M1-GITHUB-DOGFOOD`  
-**Status:** in progress (C0 landed 2026-06-07)  
+**Status:** in progress (C0–C8 landed 2026-06-07)  
 **Full spec:** [product-spec.md](./product-spec.md#milestone-1--specification--composition-dags) (DAGs, C0–C10, decision defaults)
 
 Confirmed 2026-06-07 — first validation target is one small GitHub-hosted project (design partner #1 = yourself). B2D / agency devtools — reputation-first.
@@ -59,23 +59,23 @@ Tooling lives in `~/work/monolith`; dogfood app is a **separate** GitHub repo fo
 
 Copy when marking M1 done:
 
-- [ ] AC-1: `monolith import` on GitHub repo wrangler config → valid `monolith.run.ts` (no hand fix)
-- [ ] AC-2: `monolith plan --stage dev` shows meaningful first-run diff
-- [ ] AC-3: `monolith deploy --stage dev` → HTTP 200 smoke on configured route
-- [ ] AC-4: Handler env typed; `tsc --noEmit` clean without manual `Env`
-- [ ] AC-5: `monolith plan --stage <second>` uses isolated state (plan OK)
-- [ ] AC-6: Friction log filled (≥3 worked / failed / next)
+- [x] AC-1: `monolith import` on GitHub repo wrangler config → valid `monolith.run.ts` (no hand fix)
+- [x] AC-2: `monolith plan --stage dev` shows meaningful first-run diff
+- [x] AC-3: `monolith deploy --stage dev` → HTTP 200 smoke on configured route
+- [x] AC-4: Handler env typed; `tsc --noEmit` clean without manual `Env`
+- [x] AC-5: `monolith plan --stage <second>` uses isolated state (plan OK)
+- [x] AC-6: Friction log filled (≥3 worked / failed / next)
 - [ ] AC-7: `docs/m1-demo.md` rehearsed — willing to show one agency peer
-- [ ] Non-goals respected: no npm publish, no second user, no preview SaaS
-- [ ] Week-12 metric: logged as 1 design-partner deploy
+- [x] Non-goals respected: no npm publish, no second user, no preview SaaS
+- [x] Week-12 metric: logged as 1 design-partner deploy
 
 ## Friction log
 
 | | Notes |
 | --- | --- |
-| **Worked** | C0 scaffold compiles; CLI `--help` lists M1 commands; dogfood repo `wrangler whoami` OAuth OK; D1/KV IDs wired; `wrangler deploy` → `https://monolith-m1-dogfood.armancharan.workers.dev`; **C1** `monolith import wrangler.jsonc` → `.monolith/import/<hash>.json` + `monolith.run.ts` with D1/KV bindings; **C2** `monolith whoami` reads wrangler OAuth / `CLOUDFLARE_API_TOKEN`; **C5** `monolith import --stage dev` + `monolith state init` → `.monolith/state/<stage>.json` |
-| **Failed** | Cancelled `wrangler login` can leave OAuth callback on `:8976` (kill stale node, retry login); plain `npm run deploy` in non-TTY auto-declines workers.dev registration — use [Workers onboarding](https://dash.cloudflare.com/02918ecb84e908a69d7f2f5341f8bfac/workers/onboarding) once, or interactive/`expect` deploy with `--install-skills false` |
-| **Next** | **C6** plan engine; re-run import with `--force` or overwrite flag once run.ts merge story is defined |
+| **Worked** | C0 scaffold compiles; CLI `--help` lists M1 commands; dogfood repo `wrangler whoami` OAuth OK; D1/KV IDs wired; baseline `wrangler deploy` → `https://monolith-m1-dogfood.armancharan.workers.dev`; **C1** import → `.monolith/import/<hash>.json` + `monolith.run.ts` with D1/KV; **C2** `monolith whoami` reads wrangler OAuth / `CLOUDFLARE_API_TOKEN`; **C5** `--stage dev` seeds isolated `.monolith/state/<stage>.json`; **C6** plan diffs wrangler vs state (no-op after sync); **C7** `monolith deploy` shells wrangler, persists `deployedAt` + `workerUrl`; **C8** import/plan/typegen emit `src/monolith.env.d.ts` with `MonolithEnv` — dogfood Hono handler drops manual `Bindings` type |
+| **Failed** | Cancelled `wrangler login` can leave OAuth callback on `:8976` (kill stale node, retry); non-TTY `npm run deploy` auto-declines workers.dev registration — onboard once in dashboard or use interactive deploy; import skips overwriting existing `monolith.run.ts` (must delete to regenerate); plan/typegen assume `wranglerConfigPath` on state — `state init` without import metadata needs manual wrangler path; queues/R2 in wrangler parse but no `ctx.queue()` / full R2 reconcile yet |
+| **Next** | Rehearse **AC-7** demo (`docs/m1-demo.md`) for one agency peer; optional `--force` on import for run.ts merge; wire queue binding into stack context (C4 gap); second real design partner before npm publish; remote state / destroy remain post-M1 |
 
 ## Artifacts (on done)
 

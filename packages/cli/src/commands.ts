@@ -1,11 +1,12 @@
 /**
- * M1 CLI commands — C1 import, C2 whoami, C5 state, C6 plan, C7 deploy wired.
+ * M1 CLI commands — C1 import, C2 whoami, C5 state, C6 plan, C7 deploy, C8 typegen wired.
  */
 import { runDeploy } from "./deploy.js"
 import { runDestroy } from "./destroy.js"
 import { runImport } from "./import.js"
 import { runPlan } from "./plan.js"
 import { runStateInit } from "./state.js"
+import { runTypegen } from "./typegen.js"
 import { runWhoami } from "./whoami.js"
 
 export type CommandName =
@@ -17,6 +18,7 @@ export type CommandName =
   | "help"
   | "whoami"
   | "state"
+  | "typegen"
 
 export async function runCommand(name: CommandName, args: string[]): Promise<number> {
   switch (name) {
@@ -39,6 +41,8 @@ export async function runCommand(name: CommandName, args: string[]): Promise<num
       }
       console.error("Usage: monolith state init --stage <name> [--from <import.json>]")
       return 1
+    case "typegen":
+      return runTypegen(args)
     case "help":
       printHelp()
       return 0
@@ -54,11 +58,13 @@ Usage:
   monolith state init --stage <name> [--from .monolith/import/<hash>.json]
   monolith whoami [--account-id]
   monolith plan --stage <name>
+  monolith typegen --stage <name>
   monolith deploy [--stage <name>]
   monolith destroy [--stage <name>]
 
 import reads wrangler config and writes .monolith/import/<hash>.json.
 Pass --stage on import to seed .monolith/state/<stage>.json from the snapshot.
+import and plan also emit src/monolith.env.d.ts (or beside worker main) with MonolithEnv.
 deploy runs \`npx wrangler deploy\` in the project directory (default stage: dev).
 destroy is an M1 stub — full teardown deferred post-M1.`)
 }

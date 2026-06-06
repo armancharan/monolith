@@ -10,6 +10,7 @@ import { importSnapshotPath, initStateFromImport, MONOLITH_DIR } from "@monolith
 import { mkdir, readFile, writeFile, access } from "node:fs/promises"
 import { constants } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
+import { emitTypegenFromImport } from "./typegen.js"
 
 const RUN_FILE = "monolith.run.ts"
 
@@ -105,6 +106,8 @@ export async function runImport(args: string[]): Promise<number> {
     }
     console.log(`Initialized .monolith/state/${stage}.json`)
   }
+
+  await emitTypegenFromImport(projectDir, result)
 
   return 0
 }

@@ -23,7 +23,8 @@ async function main(): Promise<void> {
     "destroy",
     "help",
     "whoami",
-    "state"
+    "state",
+    "typegen"
   ])
   if (!known.has(first as CommandName)) {
     console.error(`Unknown command: ${first}`)

@@ -15,6 +15,7 @@ import {
 } from "@monolith/cloudflare"
 import { readFile, readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
+import { emitTypegenFromImport } from "./typegen.js"
 
 function parseArgs(args: string[]): { stage?: string } {
   const parsed: { stage?: string } = {}
@@ -150,6 +151,17 @@ export async function runPlan(args: string[]): Promise<number> {
   const plan = planState(current, desiredResult.state)
   plan.desiredSource = desiredResult.source
   console.log(formatPlan(stage, current, plan))
+
+  if (current.wranglerConfigPath) {
+    try {
+      const configPath = join(projectDir, current.wranglerConfigPath)
+      const content = await readFile(configPath, "utf8")
+      const parsed = parseWranglerConfigText(content, configPath)
+      await emitTypegenFromImport(projectDir, parsed)
+    } catch {
+      // typegen is best-effort after plan; wrangler parse errors already surfaced above
+    }
+  }
 
   return 0
 }
