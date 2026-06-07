@@ -60,5 +60,24 @@ describe("writePreviewWranglerConfig", () => {
       await readFile(join(projectDir, ".monolith", "wrangler.pr-5.jsonc"), "utf8")
     )
     expect(written.name).toBe("demo-worker-pr-5")
+    expect(written.main).toBe("../src/index.ts")
+  })
+
+  it("rewrites main relative to .monolith config dir", async () => {
+    const projectDir = join(tmpdir(), `monolith-preview-config-${Date.now()}`)
+    tempDirs.push(projectDir)
+    await mkdir(projectDir, { recursive: true })
+    await writeFile(
+      join(projectDir, "wrangler.jsonc"),
+      `{ "name": "demo-worker", "main": "src/index.ts" }\n`
+    )
+
+    const configPath = await writePreviewWranglerConfig("wrangler.jsonc", "pr-123", projectDir)
+    expect(configPath).toBe(".monolith/wrangler.pr-123.jsonc")
+
+    const written = JSON.parse(
+      await readFile(join(projectDir, ".monolith", "wrangler.pr-123.jsonc"), "utf8")
+    )
+    expect(written.main).toBe("../src/index.ts")
   })
 })

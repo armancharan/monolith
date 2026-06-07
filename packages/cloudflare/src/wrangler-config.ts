@@ -1,13 +1,35 @@
 import type { ImportSnapshot } from "@monolith/core"
 import { isPreviewStage, MONOLITH_DIR, previewWorkerName } from "@monolith/core"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { join, relative } from "node:path"
 import { parseWranglerConfigText, toImportSnapshot, hashWranglerContent, type WranglerImportSnapshot } from "./wrangler-import.js"
 
 type SnapshotLike = ImportSnapshot | WranglerImportSnapshot
 
 const DEFAULT_MAIN = "src/index.ts"
 const DEFAULT_COMPATIBILITY_DATE = "2025-03-01"
+
+/** Rewrites a project-root-relative path for a wrangler config under `.monolith/`. */
+export function rebasePathForMonolithConfig(projectRelativePath: string): string {
+  if (!projectRelativePath || projectRelativePath.startsWith("/")) {
+    return projectRelativePath
+  }
+  return relative(MONOLITH_DIR, projectRelativePath)
+}
+
+function rebaseWranglerPathsForMonolithConfig(config: Record<string, unknown>): void {
+  if (typeof config.main === "string") {
+    config.main = rebasePathForMonolithConfig(config.main)
+  }
+
+  const assets = config.assets
+  if (assets && typeof assets === "object" && !Array.isArray(assets)) {
+    const record = assets as Record<string, unknown>
+    if (typeof record.directory === "string") {
+      record.directory = rebasePathForMonolithConfig(record.directory)
+    }
+  }
+}
 
 export function snapshotToWranglerConfigObject(snapshot: SnapshotLike): Record<string, unknown> {
   const config: Record<string, unknown> = {
@@ -71,6 +93,7 @@ export async function writeTempWranglerConfig(
   const relativePath = `${MONOLITH_DIR}/${filename}`
   const absolutePath = join(projectDir, relativePath)
   const config = snapshotToWranglerConfigObject(snapshot)
+  rebaseWranglerPathsForMonolithConfig(config)
 
   await mkdir(join(projectDir, MONOLITH_DIR), { recursive: true })
   await writeFile(absolutePath, `${JSON.stringify(config, null, 2)}\n`, "utf8")
