@@ -53,11 +53,17 @@ Requires npm login with publish rights to `@monolith` scope (create org at npmjs
 
 ### Status (2026-06-07)
 
-**Auth:** `npm whoami` → `armancharan` (session login OK).
+**Auth:** `npm whoami` **fails** — `~/.npmrc` has a malformed `:_authToken` (quoted value with embedded newlines / non-`npm_` material). npm error: *Bearer … is not a legal HTTP header value*. Fix: one line, no quotes:
 
-**Build:** `pnpm build` passes. Manifests prepared for npm: `private` removed on `@monolith/core`, `@monolith/cloudflare`, `create-monolith`; `@monolith/hono` bumped to **0.3.0**; `create-monolith` bumped to **0.3.0** with `publishConfig.access: public`.
+```text
+//registry.npmjs.org/:_authToken=npm_…
+```
 
-**Blocked on publish:** `npm publish --access public` for `@monolith/core@0.3.0` → **E403** — npm requires **2FA on the account** (auth-and-writes) **or** a **granular access token** with publish rights (automation / bypass-2fa). Session from `npm login` alone is not enough.
+Use a **granular Publish token** from [npmjs.com → Access Tokens](https://www.npmjs.com/settings/~youruser/tokens) (automation / bypass-2FA if account has 2FA).
+
+**Build:** `pnpm build` passes (2026-06-07 retry). Manifests prepared for npm: `private` removed on `@monolith/core`, `@monolith/cloudflare`, `create-monolith`; `@monolith/hono` **0.3.0**; `create-monolith` **0.3.0** with `publishConfig.access: public`.
+
+**Blocked on publish:** auth must succeed before any package upload. Prior blocker (E403 / 2FA) may still apply after token format is fixed.
 
 **Unblock (pick one):**
 
