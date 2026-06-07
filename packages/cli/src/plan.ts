@@ -9,8 +9,12 @@ import {
   type PlanResult
 } from "@monolith/core"
 import {
+  buildCloudDriftHints,
+  CloudflareClient,
+  formatCloudDriftHints,
   hashWranglerContent,
   parseWranglerConfigText,
+  readCloudWorker,
   toImportSnapshot,
   WranglerParseError
 } from "@monolith/cloudflare"
@@ -21,14 +25,23 @@ import { loadDesiredFromStackFile, stackFileExists } from "./stack-file.js"
 
 export type DesiredSource = "stack" | "wrangler" | "import"
 
-function parseArgs(args: string[]): { stage?: string } {
-  const parsed: { stage?: string } = {}
+export type CloudPlanMode = "auto" | "on" | "off"
+
+function parseArgs(args: string[]): { stage?: string; cloud: CloudPlanMode } {
+  const parsed: { stage?: string; cloud: CloudPlanMode } = { cloud: "auto" }
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === "--stage" && args[index + 1]) {
       parsed.stage = args[index + 1]
       index += 1
+      continue
+    }
+    if (arg === "--cloud") {
+      parsed.cloud = "on"
+    }
+    if (arg === "--no-cloud") {
+      parsed.cloud = "off"
     }
   }
 
@@ -168,6 +181,49 @@ export interface EvaluatePlanResult {
   plan: PlanResult
 }
 
+export async function resolveCloudDrift(
+  current: MonolithState,
+  projectDir: string,
+  cloudMode: CloudPlanMode,
+  configPath?: string
+): Promise<ReturnType<typeof buildCloudDriftHints> | undefined> {
+  if (cloudMode === "off") {
+    return undefined
+  }
+
+  const clientResult = await CloudflareClient.create({ projectDir })
+  if (!clientResult.ok) {
+    if (cloudMode === "on") {
+      return {
+        hints: [],
+        skippedReason: clientResult.error.message
+      }
+    }
+    return undefined
+  }
+
+  const readResult = await readCloudWorker({
+    state: current,
+    projectDir,
+    client: clientResult.value,
+    configPath
+  })
+
+  if (!readResult.ok) {
+    if (cloudMode === "on") {
+      const message =
+        typeof readResult.error === "string" ? readResult.error : readResult.error.message
+      return {
+        hints: [],
+        skippedReason: message
+      }
+    }
+    return undefined
+  }
+
+  return buildCloudDriftHints(current, readResult.value)
+}
+
 export async function evaluatePlan(
   stage: string,
   projectDir: string
@@ -210,9 +266,9 @@ export async function runPlan(
   args: string[],
   options?: { projectDir?: string }
 ): Promise<number> {
-  const { stage } = parseArgs(args)
+  const { stage, cloud } = parseArgs(args)
   if (!stage) {
-    console.error("Usage: monolith plan --stage <name>")
+    console.error("Usage: monolith plan --stage <name> [--cloud] [--no-cloud]")
     return 1
   }
 
@@ -227,7 +283,15 @@ export async function runPlan(
   }
 
   const { current, plan } = evaluated.value
-  console.log(formatPlan(stage, current, plan))
+  let output = formatPlan(stage, current, plan)
+
+  const configPath = current.wranglerConfigPath
+  const cloudDrift = await resolveCloudDrift(current, projectDir, cloud, configPath)
+  if (cloudDrift) {
+    output += formatCloudDriftHints(cloudDrift)
+  }
+
+  console.log(output)
 
   if (current.wranglerConfigPath) {
     try {

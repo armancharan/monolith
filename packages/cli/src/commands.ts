@@ -2,6 +2,7 @@
  * M1 CLI commands — C1 import, C2 whoami, C5 state, C6 plan, C7 deploy, C8 typegen wired.
  */
 import { runDeploy } from "./deploy.js"
+import { runDev } from "./dev.js"
 import { runDestroy } from "./destroy.js"
 import { runImport } from "./import.js"
 import { runPlan } from "./plan.js"
@@ -14,6 +15,7 @@ export type CommandName =
   | "import"
   | "plan"
   | "deploy"
+  | "dev"
   | "destroy"
   | "help"
   | "whoami"
@@ -31,6 +33,8 @@ export async function runCommand(name: CommandName, args: string[]): Promise<num
       return runPlan(args)
     case "deploy":
       return runDeploy(args)
+    case "dev":
+      return runDev(args)
     case "destroy":
       return runDestroy(args)
     case "whoami":
@@ -57,14 +61,17 @@ Usage:
   monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>]
   monolith state init --stage <name> [--from .monolith/import/<hash>.json]
   monolith whoami [--account-id]
-  monolith plan --stage <name>
+  monolith plan --stage <name> [--cloud] [--no-cloud]
   monolith typegen --stage <name>
+  monolith dev [--stage <name>]
   monolith deploy [--stage <name>] [--auto-approve]
   monolith destroy [--stage <name>]
 
 import reads wrangler config and writes .monolith/import/<hash>.json.
 Pass --stage on import to seed .monolith/state/<stage>.json from the snapshot.
 import and plan also emit src/monolith.env.d.ts (or beside worker main) with MonolithEnv.
+plan merges partial cloud drift hints when Cloudflare auth is available (--cloud to require, --no-cloud to skip).
+dev runs \`npx wrangler dev\` using project wrangler config or a temp config from state/import.
 deploy runs \`npx wrangler deploy\` in the project directory (default stage: dev).
 deploy checks plan first; pass --auto-approve to skip when changes are pending.
 destroy is an M1 stub — full teardown deferred post-M1.`)

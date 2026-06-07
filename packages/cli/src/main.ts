@@ -20,6 +20,7 @@ async function main(): Promise<void> {
     "import",
     "plan",
     "deploy",
+    "dev",
     "destroy",
     "help",
     "whoami",
