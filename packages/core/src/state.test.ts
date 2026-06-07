@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { afterEach, describe, expect, it } from "vitest"
-import { initStateFromImport, loadState, saveState } from "./state.js"
+import { clearState, initStateFromImport, loadState, saveState } from "./state.js"
 
 const importSnapshot = {
   workerName: "demo-worker",
@@ -79,5 +79,23 @@ describe("state engine", () => {
       expect(prodLoad.value.stage).toBe("prod")
       expect(devLoad.value.updatedAt).not.toBe(prodLoad.value.updatedAt)
     }
+  })
+
+  it("clearState removes the stage file", async () => {
+    projectDir = await mkdtemp(join(tmpdir(), "monolith-state-"))
+    const state = {
+      stackName: "demo-worker",
+      stage: "dev",
+      resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    }
+    const saveResult = await saveState("dev", state, projectDir)
+    expect(saveResult.ok).toBe(true)
+
+    const clearResult = await clearState("dev", projectDir)
+    expect(clearResult.ok).toBe(true)
+
+    const loadResult = await loadState("dev", projectDir)
+    expect(loadResult.ok).toBe(false)
   })
 })

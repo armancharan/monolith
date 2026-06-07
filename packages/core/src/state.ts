@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { STATE_DIR, statePath } from "./paths.js"
 
@@ -238,4 +238,23 @@ export async function initStateFromImport(
   }
 
   return ok(state)
+}
+
+export async function clearState(
+  stage: string,
+  projectDir = process.cwd()
+): Promise<Result<void, StateError>> {
+  const filePath = stateFilePath(stage, projectDir)
+
+  try {
+    await unlink(filePath)
+    return ok(undefined)
+  } catch (cause) {
+    const code = (cause as NodeJS.ErrnoException).code
+    if (code === "ENOENT") {
+      return ok(undefined)
+    }
+    const message = cause instanceof Error ? cause.message : String(cause)
+    return err(new StateError(`Could not remove state file: ${message}`))
+  }
 }

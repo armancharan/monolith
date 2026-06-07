@@ -1,0 +1,26 @@
+{
+  "name": "create-monolith",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Scaffold a Monolith + Hono Worker project with D1 and KV",
+  "type": "module",
+  "bin": {
+    "create-monolith": "./bin/create-monolith.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "template"
+  ],
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

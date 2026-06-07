@@ -11,10 +11,11 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b && tsc -p tsconfig.run.json",
-    "test": "pnpm --filter @monolith/core test && pnpm --filter @monolith/cloudflare test && pnpm --filter @monolith/cli test",
+    "test": "pnpm --filter @monolith/core test && pnpm --filter @monolith/cloudflare test && pnpm --filter @monolith/cli test && pnpm --filter create-monolith test",
     "test:integration": "pnpm --filter @monolith/cli test:integration",
     "test:live": "pnpm --filter @monolith/cli test:live",
-    "monolith": "node packages/cli/bin/monolith.js"
+    "monolith": "node packages/cli/bin/monolith.js",
+    "create-monolith": "node packages/create-monolith/bin/create-monolith.js"
   },
   "devDependencies": {
     "@monolith/cloudflare": "workspace:*",

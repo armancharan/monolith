@@ -1,5 +1,6 @@
 export { MONOLITH_DIR, IMPORT_DIR, STATE_DIR, importSnapshotPath, statePath } from "./paths.js"
 export {
+  clearState,
   initStateFromImport,
   loadState,
   resourcesFromImport,

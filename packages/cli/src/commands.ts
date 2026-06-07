@@ -7,6 +7,7 @@ import { runDestroy } from "./destroy.js"
 import { runImport } from "./import.js"
 import { runPlan } from "./plan.js"
 import { runStateInit } from "./state.js"
+import { runTest } from "./test.js"
 import { runTypegen } from "./typegen.js"
 import { runWhoami } from "./whoami.js"
 
@@ -17,6 +18,7 @@ export type CommandName =
   | "deploy"
   | "dev"
   | "destroy"
+  | "test"
   | "help"
   | "whoami"
   | "state"
@@ -37,6 +39,8 @@ export async function runCommand(name: CommandName, args: string[]): Promise<num
       return runDev(args)
     case "destroy":
       return runDestroy(args)
+    case "test":
+      return runTest(args)
     case "whoami":
       return runWhoami(args)
     case "state":
@@ -65,7 +69,8 @@ Usage:
   monolith typegen --stage <name>
   monolith dev [--stage <name>]
   monolith deploy [--stage <name>] [--auto-approve]
-  monolith destroy [--stage <name>]
+  monolith destroy [--stage <name>] [--auto-approve]
+  monolith test [--stage <name>] [--destroy-after]
 
 import reads wrangler config and writes .monolith/import/<hash>.json.
 Pass --stage on import to seed .monolith/state/<stage>.json from the snapshot.
@@ -74,5 +79,8 @@ plan merges partial cloud drift hints when Cloudflare auth is available (--cloud
 dev runs \`npx wrangler dev\` using project wrangler config or a temp config from state/import.
 deploy runs \`npx wrangler deploy\` in the project directory (default stage: dev).
 deploy checks plan first; pass --auto-approve to skip when changes are pending.
-destroy is an M1 stub — full teardown deferred post-M1.`)
+destroy runs plan, then \`npx wrangler delete <worker>\` when --auto-approve is set.
+destroy clears local stage state; D1/KV/R2 buckets are NOT deleted from Cloudflare (bindings only).
+test runs plan guard, deploy (--auto-approve), optional HTTP smoke (MONOLITH_TEST_URL or state workerUrl), optional --destroy-after teardown.
+Place future assertions in .monolith/test/assertions.json.`)
 }
