@@ -1,0 +1,32 @@
+# GitHub Pages deploy for website/ — DISABLED until ready.
+# To ship: remove `if: false` on the deploy job, enable Pages (Settings → Pages → GitHub Actions),
+# optionally add custom domain (monolithstack.dev).
+name: Deploy website
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/deploy-website.yml"
+
+jobs:
+  deploy:
+    if: false  # flip to true (or delete line) when ready to publish landing page
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+      - id: deployment
+        uses: actions/deploy-pages@v4

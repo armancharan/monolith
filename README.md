@@ -5,7 +5,7 @@
 **Effect-native** TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `monolith.run.ts` using Effect (`Context.Service`, `Layer`, `Data.TaggedError`), get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production.
 
 **Portfolio id:** Perch (experiment) · **M1 codename:** Monolith  
-**Status:** v0.3.0 — Effect-native core (import/plan/deploy, cloud drift, dev/test harness, preview CI, optional R2 state)  
+**Status:** v0.3.0 — Effect-native core (import/plan/deploy, cloud drift, dev/test, preview CI, optional R2 state) · [Website](./website/) · [Branding](./docs/branding.md)  
 **Positioning:** B2D / agency devtools — reputation-first validation, not Vercel-adjacent hosting or Canva-style creative tooling.
 
 ## Features (Phase A–C)
@@ -148,6 +148,8 @@ Full product spec, DAGs, and Phase 0–2 roadmap: [docs/product-spec.md](./docs/
 | [docs/getting-started.md](./docs/getting-started.md) | Install, first deploy, preview stages |
 | [docs/commands.md](./docs/commands.md) | CLI command reference |
 | [docs/architecture.md](./docs/architecture.md) | Packages, reconcile loop diagram |
+| [docs/branding.md](./docs/branding.md) | Name, tagline, voice, domain strategy, positioning |
+| [website/](./website/) | Minimal landing page (GitHub Pages ready) |
 | [docs/publishing.md](./docs/publishing.md) | npm publish + public repo checklist |
 | [docs/product-spec.md](./docs/product-spec.md) | Canonical product spec (DVI, competitive, GTM, M1 DAGs) |
 | [docs/milestone-1.md](./docs/milestone-1.md) | M1 working doc — verification checklist + friction log |

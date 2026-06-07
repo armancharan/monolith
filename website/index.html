@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monolith — TypeScript IaC for Cloudflare</title>
+  <meta name="description" content="Effect-native plan, drift detection, and deploy for Cloudflare Workers. Import wrangler, reconcile in monolith.run.ts.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <span class="wordmark">monolith</span>
+      <nav>
+        <a href="https://github.com/armancharan/monolith">GitHub</a>
+        <a href="../docs/getting-started.md">Docs</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero panel">
+      <div class="container">
+        <p class="version">v0.3.0 · Effect-native</p>
+        <h1>TypeScript IaC for Cloudflare teams who outgrew wrangler.toml</h1>
+        <p class="lead">Import your wrangler config, declare bindings in <code>monolith.run.ts</code>, plan drift against cloud, deploy through wrangler — with typed <code>env</code> and stage isolation.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/armancharan/monolith">View on GitHub</a>
+          <a class="btn" href="../docs/getting-started.md">Getting started</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="features container">
+      <article class="panel feature">
+        <h2>Import</h2>
+        <p>Parse <code>wrangler.jsonc</code> into state + scaffold <code>monolith.run.ts</code>. No greenfield rewrite.</p>
+      </article>
+      <article class="panel feature">
+        <h2>Plan &amp; drift</h2>
+        <p>Three-way diff: desired vs local state vs cloud actual. Block deploy until you approve.</p>
+      </article>
+      <article class="panel feature">
+        <h2>Effect-native reconcile</h2>
+        <p><code>StateStore</code>, <code>PlanEngine</code>, <code>MonolithLive</code> — typed errors, Layers, no throw/catch soup.</p>
+      </article>
+    </section>
+
+    <section class="panel footer-note">
+      <div class="container">
+        <p>B2D / agency devtools · Wrangler-native deploy · Not Terraform · Not Vercel</p>
+        <p class="mono"><a href="../docs/branding.md">Branding &amp; positioning</a> · <a href="https://github.com/armancharan/monolith/releases/tag/v0.3.0">Release notes</a></p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
