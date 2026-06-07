@@ -1,0 +1,39 @@
+{
+  "name": "@monolith/effect",
+  "version": "0.2.0",
+  "description": "Effect adapter for Monolith — optional layer for Effect-native apps",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/armancharan/monolith.git",
+    "directory": "packages/effect"
+  },
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@monolith/cloudflare": "^0.2.0",
+    "@monolith/core": "^0.2.0",
+    "effect": "^3.0.0"
+  },
+  "dependencies": {
+    "@monolith/cloudflare": "workspace:*",
+    "@monolith/core": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "effect": "^3.16.5",
+    "vitest": "^3.2.4"
+  }
+}

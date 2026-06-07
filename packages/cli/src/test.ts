@@ -1,6 +1,11 @@
 import { loadState } from "@monolith/core"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
+import {
+  evaluateRouteAssertions,
+  normalizeAssertionRoutes,
+  type TestAssertionFile
+} from "./assertions.js"
 import { runDeploy, type RunWranglerDeploy } from "./deploy.js"
 import { runDestroy, type RunWranglerDelete } from "./destroy.js"
 import { evaluatePlan } from "./plan.js"
@@ -26,18 +31,6 @@ export interface TestHarnessOptions {
   runWranglerDeploy?: RunWranglerDeploy
   runWranglerDelete?: RunWranglerDelete
   httpFetch?: HttpFetch
-}
-
-/** Future assertion file shape — loaded when present, not yet fully evaluated. */
-export interface TestAssertionFile {
-  version: number
-  assertions?: Array<{
-    type: "http"
-    path?: string
-    url?: string
-    expectStatus?: number
-    expectBody?: string
-  }>
 }
 
 function parseArgs(args: string[]): TestArgs & { preview: boolean } {
@@ -139,11 +132,24 @@ export async function runTest(args: string[], options?: TestHarnessOptions): Pro
   const testUrl = resolveTestUrl(workerUrl, process.env.MONOLITH_TEST_URL)
 
   const assertionFile = await loadAssertionFile(projectDir)
-  if (assertionFile?.assertions?.length) {
-    console.log(`Found ${assertionFile.assertions.length} assertion(s) in ${ASSERTIONS_DIR}/ (future runner — not evaluated yet).`)
-  }
+  const routes = assertionFile ? normalizeAssertionRoutes(assertionFile) : []
 
-  if (testUrl) {
+  if (routes.length > 0) {
+    if (!testUrl) {
+      console.error(
+        "Assertions require a worker URL. Deploy must capture workerUrl in state or set MONOLITH_TEST_URL."
+      )
+      return 1
+    }
+
+    console.log(`Running ${routes.length} route assertion(s) from ${ASSERTIONS_DIR}/assertions.json:`)
+    const assertionResult = await evaluateRouteAssertions(testUrl, routes, httpFetch)
+    if (!assertionResult.ok) {
+      console.error(assertionResult.message)
+      return 1
+    }
+    console.log("  Route assertions passed.")
+  } else if (testUrl) {
     console.log(`Running HTTP smoke check: ${testUrl}`)
     const smoke = await runHttpSmokeCheck(testUrl, httpFetch)
     if (!smoke.ok) {
@@ -152,7 +158,7 @@ export async function runTest(args: string[], options?: TestHarnessOptions): Pro
     }
     console.log("  HTTP smoke passed (2xx).")
   } else {
-    console.log("Skipping HTTP smoke (set MONOLITH_TEST_URL or deploy to capture workerUrl in state).")
+    console.log("Skipping HTTP checks (set MONOLITH_TEST_URL or deploy to capture workerUrl in state).")
   }
 
   if (destroyAfter) {
@@ -168,3 +174,6 @@ export async function runTest(args: string[], options?: TestHarnessOptions): Pro
   console.log(`Test harness finished for stage "${stage}".`)
   return 0
 }
+
+// Re-export for tests
+export type { TestAssertionFile } from "./assertions.js"

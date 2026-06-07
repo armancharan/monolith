@@ -50,6 +50,7 @@ describe("runTest", () => {
     const projectDir = join(tmpdir(), `monolith-test-harness-${Date.now()}-${Math.random()}`)
     tempDirs.push(projectDir)
     await mkdir(join(projectDir, ".monolith", "state"), { recursive: true })
+    await mkdir(join(projectDir, ".monolith", "test"), { recursive: true })
     await writeFile(join(projectDir, ".monolith", "state", "dev.json"), `${JSON.stringify(state, null, 2)}\n`)
     await writeFile(
       join(projectDir, "wrangler.jsonc"),
@@ -58,16 +59,22 @@ describe("runTest", () => {
     return projectDir
   }
 
-  it("deploys, runs HTTP smoke, and optionally destroys", async () => {
+  it("deploys, runs route assertions, and optionally destroys", async () => {
     const projectDir = await makeProject({
       stackName: "demo-worker",
       stage: "dev",
       resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
       updatedAt: "2026-01-01T00:00:00.000Z",
-      wranglerConfigPath: "wrangler.jsonc"
+      wranglerConfigPath: "wrangler.jsonc",
+      workerUrl: "https://demo-worker.example.workers.dev"
     })
 
-    vi.stubEnv("MONOLITH_TEST_URL", "https://demo-worker.example.workers.dev")
+    await writeFile(
+      join(projectDir, ".monolith", "test", "assertions.json"),
+      `${JSON.stringify({
+        routes: [{ path: "/health", expectStatus: 200, expectBodyContains: "ok" }]
+      }, null, 2)}\n`
+    )
 
     const deployCalls: string[] = []
     const deleteCalls: string[] = []
@@ -86,7 +93,7 @@ describe("runTest", () => {
     }
 
     const mockFetch: HttpFetch = async (url) => {
-      expect(url).toBe("https://demo-worker.example.workers.dev")
+      expect(url).toBe("https://demo-worker.example.workers.dev/health")
       return { status: 200, body: "ok" }
     }
 
@@ -102,7 +109,7 @@ describe("runTest", () => {
     expect(deleteCalls).toEqual(["delete"])
   })
 
-  it("fails when HTTP smoke returns non-2xx", async () => {
+  it("fails when route assertion returns non-2xx", async () => {
     const projectDir = await makeProject({
       stackName: "demo-worker",
       stage: "dev",
@@ -111,6 +118,11 @@ describe("runTest", () => {
       wranglerConfigPath: "wrangler.jsonc",
       workerUrl: "https://demo-worker.example.workers.dev"
     })
+
+    await writeFile(
+      join(projectDir, ".monolith", "test", "assertions.json"),
+      `${JSON.stringify({ routes: [{ path: "/health", expectStatus: 200 }] }, null, 2)}\n`
+    )
 
     const mockDeploy: RunWranglerDeploy = async () => ({
       exitCode: 0,

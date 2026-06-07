@@ -1,5 +1,7 @@
 node_modules/
 .monolith/
+!packages/create-monolith/template/.monolith/
+!packages/create-monolith/template/.monolith/**
 .env
 .env.*
 !.env.example

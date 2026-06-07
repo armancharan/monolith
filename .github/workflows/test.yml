@@ -4,9 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Optional scheduled live smoke — disabled by default.
-  # To enable: uncomment schedule below and add repository secrets
-  # CLOUDFLARE_API_TOKEN (and optionally MONOLITH_LIVE_WORKER_URL).
+  # Optional scheduled live smoke — enable when repository secrets are configured.
   # schedule:
   #   - cron: "0 6 * * 1"
 
@@ -40,10 +38,9 @@ jobs:
       - name: Integration tests
         run: pnpm test:integration
 
-  # Live-cloud smoke — gated; does not run on PRs by default.
-  # Enable by uncommenting schedule above and setting secrets, then flip if to true.
+  # Live-cloud smoke — runs when MONOLITH_LIVE_TESTS repo variable is "1" and token secret exists.
   live-smoke:
-    if: false
+    if: vars.MONOLITH_LIVE_TESTS == '1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

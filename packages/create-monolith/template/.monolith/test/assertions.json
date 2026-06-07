@@ -1,0 +1,14 @@
+{
+  "routes": [
+    {
+      "path": "/health",
+      "expectStatus": 200,
+      "expectBodyContains": "ok"
+    },
+    {
+      "path": "/",
+      "expectStatus": 200,
+      "expectBodyContains": "ok"
+    }
+  ]
+}

@@ -1,8 +1,10 @@
-# Monolith CI — plan on pull requests, deploy production on main.
+# Monolith CI — plan + preview deploy on PR, production deploy on main.
 # Copy to .github/workflows/monolith.yml in your Worker repo.
 #
-# Required secret: CLOUDFLARE_API_TOKEN (Workers Scripts edit + read)
-# Optional secret: MONOLITH_STAGE (production stage name; default: production)
+# Required secrets:
+#   CLOUDFLARE_API_TOKEN — Workers Scripts edit + read
+# Optional secrets:
+#   MONOLITH_STAGE — production stage name (default: production)
 
 name: Monolith
 
@@ -14,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   monolith:
@@ -47,6 +50,32 @@ jobs:
         run: |
           pnpm monolith import wrangler.jsonc --preview || true
           pnpm monolith plan --preview
+
+      - name: Deploy preview (pull request)
+        if: github.event_name == 'pull_request'
+        id: preview_deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -e
+          pnpm monolith deploy --preview --auto-approve | tee deploy.log
+          WORKER_URL=$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' deploy.log | tail -1 || true)
+          echo "worker_url=${WORKER_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request' && steps.preview_deploy.outputs.worker_url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" --body "$(cat <<EOF
+          ## Monolith preview deploy
+
+          Preview Worker URL: ${{ steps.preview_deploy.outputs.worker_url }}
+
+          Stage: \`pr-${{ github.event.pull_request.number }}\`
+          EOF
+          )"
 
       - name: Deploy production (main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -4,6 +4,8 @@
     { "path": "./packages/core" },
     { "path": "./packages/cloudflare" },
     { "path": "./packages/cli" },
-    { "path": "./packages/create-monolith" }
+    { "path": "./packages/create-monolith" },
+    { "path": "./packages/hono" },
+    { "path": "./packages/effect" }
   ]
 }

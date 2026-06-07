@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "assertions": [
+    {
+      "type": "http",
+      "path": "/health",
+      "expectStatus": 200,
+      "expectBody": "ok"
+    }
+  ]
+}

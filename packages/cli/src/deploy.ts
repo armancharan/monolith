@@ -1,10 +1,21 @@
-import { isPreviewStage, loadState, previewWorkerName, saveState, type MonolithState } from "@monolith/core"
+import {
+  formatBindingSummary,
+  isPreviewStage,
+  loadState,
+  previewWorkerName,
+  saveState,
+  summarizeBindings,
+  type MonolithState
+} from "@monolith/core"
 import {
   deployWithDoMigration,
   detectDoMigrations,
+  mergeVarsIntoWranglerConfig,
   parseWranglerConfigText,
+  readStageVarsFile,
   writePreviewWranglerConfig
 } from "@monolith/cloudflare"
+import { maybePushStateAfterDeploy } from "./state-remote.js"
 import { readFile } from "node:fs/promises"
 import { spawn } from "node:child_process"
 import { constants } from "node:fs"
@@ -77,6 +88,29 @@ async function resolveWranglerConfigPath(
   return undefined
 }
 
+async function applyStageVarsToDeployConfig(
+  configPath: string,
+  stage: string,
+  projectDir: string
+): Promise<string> {
+  const stageVars = await readStageVarsFile(stage, projectDir)
+  if (!stageVars?.vars || Object.keys(stageVars.vars).length === 0) {
+    return configPath
+  }
+
+  const { mkdir, readFile, writeFile } = await import("node:fs/promises")
+  const absolutePath = join(projectDir, configPath)
+  const content = await readFile(absolutePath, "utf8")
+  const parsed = JSON.parse(content) as Record<string, unknown>
+  const merged = mergeVarsIntoWranglerConfig(parsed, stageVars.vars)
+  const varsPath = `.monolith/wrangler.${stage}.vars.jsonc`
+  const varsAbsolute = join(projectDir, varsPath)
+
+  await mkdir(join(projectDir, ".monolith"), { recursive: true })
+  await writeFile(varsAbsolute, `${JSON.stringify(merged, null, 2)}\n`, "utf8")
+  return varsPath
+}
+
 async function resolveDeployConfigPath(
   state: MonolithState,
   stage: string,
@@ -87,16 +121,19 @@ async function resolveDeployConfigPath(
     return {}
   }
 
-  if (!isPreviewStage(stage)) {
-    return { configPath: baseConfigPath }
+  let configPath = baseConfigPath
+  let previewWorkerNameValue: string | undefined
+
+  if (isPreviewStage(stage)) {
+    const worker = state.resources.find((resource) => resource.kind === "worker")
+    const baseName = worker?.name ?? state.stackName
+    previewWorkerNameValue = previewWorkerName(baseName, stage)
+    configPath = await writePreviewWranglerConfig(baseConfigPath, stage, projectDir)
   }
 
-  const worker = state.resources.find((resource) => resource.kind === "worker")
-  const baseName = worker?.name ?? state.stackName
-  const previewName = previewWorkerName(baseName, stage)
-  const configPath = await writePreviewWranglerConfig(baseConfigPath, stage, projectDir)
+  configPath = await applyStageVarsToDeployConfig(configPath, stage, projectDir)
 
-  return { configPath, previewWorkerName: previewName }
+  return { configPath, previewWorkerName: previewWorkerNameValue }
 }
 
 export async function runWranglerDeploy(
@@ -200,14 +237,21 @@ export async function runDeploy(
     }
   }
 
+  const preview = isPreviewStage(stage)
+  const bindingSummary = formatBindingSummary(
+    summarizeBindings(current.resources, { previewStage: preview }),
+    { previewStage: preview }
+  )
+
   console.log(`Deploying stage "${stage}" via wrangler...`)
   if (configPath) {
     console.log(`  Config: ${configPath}`)
   }
+  console.log(bindingSummary)
   if (deployConfig.previewWorkerName) {
     console.log(`  Preview worker: ${deployConfig.previewWorkerName}`)
     console.log(
-      "  Note: preview uses a suffixed workers.dev name; add route prefix in wrangler for custom domains."
+      "  Note: preview uses a suffixed workers.dev name; D1/KV/R2 bindings remain shared with base stage."
     )
   }
 
@@ -250,6 +294,7 @@ export async function runDeploy(
     console.log(`  Worker URL: ${workerUrl}`)
   }
   console.log(`  State updated: .monolith/state/${stage}.json`)
+  await maybePushStateAfterDeploy(stage, nextState, projectDir)
 
   return 0
 }

@@ -67,6 +67,14 @@ export {
   writePreviewWranglerConfig,
   writeTempWranglerConfig
 } from "./wrangler-config.js"
+export { R2StateBackend, type R2StateBackendOptions } from "./r2-state.js"
+export {
+  mergeVarsIntoWranglerConfig,
+  readStageVarsFile,
+  stageVarsFilename,
+  stageVarsPath,
+  type StageVarsFile
+} from "./stage-vars.js"
 export {
   bindingEntriesFromImportResult,
   bindingEntriesFromStateResources,

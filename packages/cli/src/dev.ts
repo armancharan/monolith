@@ -1,17 +1,33 @@
-import { IMPORT_DIR, loadState, type ImportSnapshot, type MonolithState } from "@monolith/core"
-import { writeTempWranglerConfig } from "@monolith/cloudflare"
+import {
+  formatBindingSummary,
+  isPreviewStage,
+  loadState,
+  summarizeBindings,
+  type ImportSnapshot,
+  type MonolithState
+} from "@monolith/core"
+import {
+  mergeVarsIntoWranglerConfig,
+  readStageVarsFile,
+  writePreviewWranglerConfig,
+  writeTempWranglerConfig
+} from "@monolith/cloudflare"
+import { IMPORT_DIR } from "@monolith/core"
 import { spawn, type ChildProcess } from "node:child_process"
 import { constants } from "node:fs"
-import { access, readFile } from "node:fs/promises"
+import { access, mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { resolveDesiredState } from "./plan.js"
 import { parseStageArgs, requireStage } from "./stage.js"
 
 const DEFAULT_STAGE = "dev"
 const WRANGLER_CONFIG_CANDIDATES = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
+const KNOWN_FLAGS = new Set(["--stage", "--preview", "--watch"])
 
 export interface DevArgs {
   stage: string
+  watch: boolean
+  wranglerArgs: string[]
 }
 
 export interface WranglerDevResult {
@@ -21,19 +37,44 @@ export interface WranglerDevResult {
 
 export type RunWranglerDev = (
   projectDir: string,
-  configPath: string
+  configPath: string,
+  wranglerArgs: string[]
 ) => Promise<WranglerDevResult>
 
 function parseArgs(args: string[]): DevArgs & { preview: boolean } {
   const stageParsed = parseStageArgs(args, { defaultStage: DEFAULT_STAGE })
   const stage = requireStage(
     stageParsed,
-    "Usage: monolith dev [--stage <name>] [--preview]"
+    "Usage: monolith dev [--stage <name>] [--preview] [--watch]"
   )
+
+  const wranglerArgs: string[] = []
+  let watch = false
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === "--watch") {
+      watch = true
+      wranglerArgs.push("--watch")
+      continue
+    }
+    if (KNOWN_FLAGS.has(arg)) {
+      if (arg === "--stage") {
+        index += 1
+      }
+      continue
+    }
+    if (!arg.startsWith("-") && args[index - 1] === "--stage") {
+      continue
+    }
+    wranglerArgs.push(arg)
+  }
 
   return {
     stage: stage ?? "",
-    preview: stageParsed.preview
+    preview: stageParsed.preview,
+    watch,
+    wranglerArgs
   }
 }
 
@@ -46,7 +87,7 @@ async function resolveWranglerConfigPath(
       await access(join(projectDir, state.wranglerConfigPath), constants.F_OK)
       return state.wranglerConfigPath
     } catch {
-      // fall through to candidates / temp config
+      // fall through
     }
   }
 
@@ -55,7 +96,7 @@ async function resolveWranglerConfigPath(
       await access(join(projectDir, candidate), constants.F_OK)
       return candidate
     } catch {
-      // try next candidate
+      // try next
     }
   }
 
@@ -76,18 +117,94 @@ async function readImportSnapshotFromState(
       const text = await readFile(join(projectDir, importPath), "utf8")
       return JSON.parse(text) as ImportSnapshot
     } catch {
-      // try next candidate
+      // try next
     }
   }
 
   return undefined
 }
 
+async function importSnapshotFromDesired(
+  state: MonolithState,
+  projectDir: string
+): Promise<ImportSnapshot | undefined> {
+  const desired = await resolveDesiredState(state, projectDir)
+  if (!desired) {
+    return undefined
+  }
+
+  const worker = desired.state.resources.find((resource) => resource.kind === "worker")
+  if (!worker?.name) {
+    return undefined
+  }
+
+  return {
+    workerName: worker.name,
+    contentHash: state.importHash ?? "dev-temp",
+    d1Databases: desired.state.resources
+      .filter((resource) => resource.kind === "d1")
+      .map((resource) => ({
+        binding: resource.binding ?? resource.id,
+        databaseName: resource.name ?? resource.binding ?? resource.id,
+        databaseId: resource.databaseId ?? ""
+      })),
+    kvNamespaces: desired.state.resources
+      .filter((resource) => resource.kind === "kv")
+      .map((resource) => ({
+        binding: resource.binding ?? resource.id,
+        id: resource.namespaceId ?? ""
+      })),
+    r2Buckets: desired.state.resources
+      .filter((resource) => resource.kind === "r2")
+      .map((resource) => ({
+        binding: resource.binding ?? resource.id,
+        bucketName: resource.bucketName
+      })),
+    queues: desired.state.resources
+      .filter((resource) => resource.kind === "queue")
+      .map((resource) => ({
+        binding: resource.binding ?? resource.id,
+        queueName: resource.name
+      })),
+    durableObjects: desired.state.resources
+      .filter((resource) => resource.kind === "durable_object")
+      .map((resource) => ({
+        binding: resource.binding ?? resource.id,
+        className: resource.className ?? resource.name ?? resource.binding ?? resource.id,
+        scriptName: resource.scriptName
+      }))
+  }
+}
+
+async function applyStageVarsToConfigPath(
+  configPath: string,
+  stage: string,
+  projectDir: string
+): Promise<string> {
+  const stageVars = await readStageVarsFile(stage, projectDir)
+  if (!stageVars?.vars || Object.keys(stageVars.vars).length === 0) {
+    return configPath
+  }
+
+  const absolutePath = join(projectDir, configPath)
+  const content = await readFile(absolutePath, "utf8")
+  const parsed = JSON.parse(content) as Record<string, unknown>
+  const merged = mergeVarsIntoWranglerConfig(parsed, stageVars.vars)
+  const varsPath = `.monolith/wrangler.${stage}.vars.jsonc`
+  const varsAbsolute = join(projectDir, varsPath)
+
+  await mkdir(join(projectDir, ".monolith"), { recursive: true })
+  await writeFile(varsAbsolute, `${JSON.stringify(merged, null, 2)}\n`, "utf8")
+
+  console.log(`  Stage vars merged from ${`.monolith/vars.${stage}.json`}`)
+  return varsPath
+}
+
 export async function resolveDevConfigPath(
   stage: string,
   projectDir: string
 ): Promise<
-  | { ok: true; configPath: string; temp: boolean }
+  | { ok: true; configPath: string; temp: boolean; state: MonolithState }
   | { ok: false; message: string }
 > {
   const stateResult = await loadState(stage, projectDir)
@@ -96,60 +213,48 @@ export async function resolveDevConfigPath(
   }
 
   const state = stateResult.value
+  const preview = isPreviewStage(stage)
+
   const existing = await resolveWranglerConfigPath(state, projectDir)
   if (existing) {
-    return { ok: true, configPath: existing, temp: false }
+    let configPath = existing
+    if (preview) {
+      configPath = await writePreviewWranglerConfig(existing, stage, projectDir)
+    }
+    configPath = await applyStageVarsToConfigPath(configPath, stage, projectDir)
+    return { ok: true, configPath, temp: preview || configPath.startsWith(".monolith/"), state }
   }
 
-  const desired = await resolveDesiredState(state, projectDir)
-  const snapshot = await readImportSnapshotFromState(state, projectDir)
-  if (!snapshot && desired) {
-    const worker = desired.state.resources.find((resource) => resource.kind === "worker")
-    if (worker?.name) {
-      const fallback: ImportSnapshot = {
-        workerName: worker.name,
-        contentHash: state.importHash ?? "dev-temp",
-        d1Databases: desired.state.resources
-          .filter((resource) => resource.kind === "d1")
-          .map((resource) => ({
-            binding: resource.binding ?? resource.id,
-            databaseName: resource.name ?? resource.binding ?? resource.id,
-            databaseId: resource.databaseId ?? ""
-          })),
-        kvNamespaces: desired.state.resources
-          .filter((resource) => resource.kind === "kv")
-          .map((resource) => ({
-            binding: resource.binding ?? resource.id,
-            id: resource.namespaceId ?? ""
-          })),
-        r2Buckets: desired.state.resources
-          .filter((resource) => resource.kind === "r2")
-          .map((resource) => ({
-            binding: resource.binding ?? resource.id,
-            bucketName: resource.bucketName
-          })),
-        queues: desired.state.resources
-          .filter((resource) => resource.kind === "queue")
-          .map((resource) => ({
-            binding: resource.binding ?? resource.id,
-            queueName: resource.name
-          })),
-        durableObjects: desired.state.resources
-          .filter((resource) => resource.kind === "durable_object")
-          .map((resource) => ({
-            binding: resource.binding ?? resource.id,
-            className: resource.className ?? resource.name ?? resource.binding ?? resource.id,
-            scriptName: resource.scriptName
-          }))
-      }
-      const configPath = await writeTempWranglerConfig(fallback, projectDir)
-      return { ok: true, configPath, temp: true }
-    }
-  }
+  const snapshot =
+    (await readImportSnapshotFromState(state, projectDir)) ??
+    (await importSnapshotFromDesired(state, projectDir))
 
   if (snapshot) {
-    const configPath = await writeTempWranglerConfig(snapshot, projectDir)
-    return { ok: true, configPath, temp: true }
+    let previewSnapshot = snapshot
+    if (preview) {
+      const { previewWorkerName: suffixWorkerName } = await import("@monolith/core")
+      previewSnapshot = {
+        ...snapshot,
+        workerName: suffixWorkerName(snapshot.workerName, stage)
+      }
+    }
+
+    const stageVars = await readStageVarsFile(stage, projectDir)
+    let configPath = await writeTempWranglerConfig(
+      previewSnapshot,
+      projectDir,
+      preview ? `wrangler.${stage}.jsonc` : "wrangler.dev.jsonc"
+    )
+
+    if (stageVars?.vars) {
+      const absolutePath = join(projectDir, configPath)
+      const content = await readFile(absolutePath, "utf8")
+      const parsed = JSON.parse(content) as Record<string, unknown>
+      const merged = mergeVarsIntoWranglerConfig(parsed, stageVars.vars)
+      await writeFile(absolutePath, `${JSON.stringify(merged, null, 2)}\n`, "utf8")
+    }
+
+    return { ok: true, configPath, temp: true, state }
   }
 
   return {
@@ -161,10 +266,13 @@ export async function resolveDevConfigPath(
 
 export async function runWranglerDev(
   projectDir: string,
-  configPath: string
+  configPath: string,
+  wranglerArgs: string[] = []
 ): Promise<WranglerDevResult> {
+  const args = ["wrangler", "dev", "--config", configPath, ...wranglerArgs]
+
   return new Promise((resolve) => {
-    const child: ChildProcess = spawn("npx", ["wrangler", "dev", "--config", configPath], {
+    const child: ChildProcess = spawn("npx", args, {
       cwd: projectDir,
       env: process.env,
       stdio: "inherit"
@@ -203,7 +311,7 @@ export async function runDev(
   args: string[],
   options?: { runWrangler?: RunWranglerDev; projectDir?: string }
 ): Promise<number> {
-  const { stage } = parseArgs(args)
+  const { stage, watch, wranglerArgs } = parseArgs(args)
   if (!stage) {
     return 1
   }
@@ -217,10 +325,23 @@ export async function runDev(
     return 1
   }
 
-  const { configPath, temp } = configResult
-  console.log(`Starting wrangler dev for stage "${stage}"...`)
-  console.log(`  Config: ${configPath}${temp ? " (generated from state/import)" : ""}`)
+  const { configPath, temp, state } = configResult
+  const preview = isPreviewStage(stage)
+  const bindingSummary = formatBindingSummary(
+    summarizeBindings(state.resources, { previewStage: preview }),
+    { previewStage: preview }
+  )
 
-  const result = await dev(projectDir, configPath)
+  console.log(`monolith dev`)
+  console.log(`  Stage: ${stage}${preview ? " (preview)" : ""}`)
+  console.log(`  Config: ${configPath}${temp ? " (generated from state/import)" : ""}`)
+  console.log(bindingSummary)
+  if (watch) {
+    console.log("  Watch: enabled (passthrough to wrangler dev --watch)")
+  } else {
+    console.log("  Watch: off (pass --watch to enable wrangler watch mode)")
+  }
+
+  const result = await dev(projectDir, configPath, wranglerArgs)
   return result.exitCode
 }

@@ -1,0 +1,33 @@
+{
+  "name": "@monolith/hono",
+  "version": "0.2.0",
+  "description": "Hono preset for Monolith Cloudflare Workers",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/armancharan/monolith.git",
+    "directory": "packages/hono"
+  },
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "hono": "^4.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "hono": "^4.7.10",
+    "vitest": "^3.2.4"
+  }
+}

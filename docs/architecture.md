@@ -1,15 +1,17 @@
 # Architecture
 
-Monolith is a TypeScript IaC layer for Cloudflare Workers. Wrangler remains the deploy engine; Monolith adds desired-state planning, per-stage local state, and typed bindings.
+Monolith is a TypeScript IaC layer for Cloudflare Workers. Wrangler remains the deploy engine; Monolith adds desired-state planning, per-stage local (or optional remote) state, and typed bindings.
 
 ## Packages
 
 | Package | Role |
 | --- | --- |
-| `@monolith/core` | Stack types, plan diff, state I/O, preview stage helpers |
-| `@monolith/cloudflare` | Wrangler import/parse, temp config, Cloudflare API client |
-| `@monolith/cli` | `monolith` bin — import, plan, deploy, destroy, test, dev, typegen |
+| `@monolith/core` | Stack types, plan diff, state I/O, preview stage helpers, remote state interface |
+| `@monolith/cloudflare` | Wrangler import/parse, temp config, Cloudflare API client, R2 state backend |
+| `@monolith/cli` | `monolith` bin — import, plan, deploy, destroy, test, dev, typegen, state pull/push |
 | `create-monolith` | Project scaffold (Hono + D1 + KV template) |
+| `@monolith/hono` | Optional Hono preset — `createHonoWorker(app)` |
+| `@monolith/effect` | Optional Effect Layer adapter for Effect-native apps |
 
 ## Reconcile loop
 
@@ -21,6 +23,7 @@ flowchart LR
     RUN[monolith.run.ts]
     WR[wrangler.jsonc]
     IMP[.monolith/import snapshot]
+    VARS[.monolith/vars.stage.json]
   end
 
   subgraph reconcile [Reconcile]
@@ -31,18 +34,21 @@ flowchart LR
   end
 
   subgraph persist [State]
-    STATE[".monolith/state/stage.json"]
+    LOCAL[".monolith/state/stage.json"]
+    REMOTE[R2 optional]
   end
 
   RUN --> PLAN
   WR --> PLAN
   IMP --> PLAN
-  STATE --> PLAN
+  LOCAL --> PLAN
   PLAN --> DIFF
   DIFF -->|no changes| DONE[exit 0]
   DIFF -->|changes| DEPLOY
+  VARS --> DEPLOY
   DEPLOY --> WRANGLER
-  WRANGLER --> STATE
+  WRANGLER --> LOCAL
+  LOCAL --> REMOTE
 ```
 
 ### Desired state resolution (plan)
@@ -64,17 +70,19 @@ flowchart LR
 
 Use `--local-only` to revert to state-vs-desired only (pre-Phase A behavior).
 
-Cloud read endpoint: `GET /accounts/{account_id}/workers/scripts/{script_name}/settings` (bindings → `StateResource[]` with IDs like `d1:DB`, `kv:KV`).
-
 ### Apply (deploy)
 
-`monolith deploy` invokes wrangler as a subprocess. On success, state is updated with `deployedAt` and `workerUrl` parsed from wrangler output.
+`monolith deploy` invokes wrangler as a subprocess. On success, state is updated with `deployedAt` and `workerUrl` parsed from wrangler output. Optional R2 push when `MONOLITH_STATE_BACKEND=r2`.
 
 Deploy blocks when **either** local pending changes **or** cloud drift exist, unless `--auto-approve`.
 
 **Durable Object migrations:** when wrangler declares `new_classes` / `new_sqlite_classes` migration tags alongside DO bindings, deploy runs wrangler **twice** (Cloudflare two-step migration requirement).
 
-Preview stages (`pr-*`) write `.monolith/wrangler.<stage>.jsonc` with Worker name suffix before deploy.
+Preview stages (`pr-*`) write `.monolith/wrangler.<stage>.jsonc` with Worker name suffix before deploy. Binding summary logs worker as **isolated**, D1/KV/R2 as **shared**.
+
+### Test harness
+
+`monolith test` runs plan → deploy → `.monolith/test/assertions.json` route checks → optional HTTP smoke → optional `--destroy-after`.
 
 ### Destroy
 
@@ -84,15 +92,18 @@ Partial teardown: deletes Worker script, clears local state. Shared binding reso
 
 Each stage is an isolated namespace:
 
-- State: `.monolith/state/<stage>.json`
+- State: `.monolith/state/<stage>.json` (local default)
+- Remote: `monolith/state/<stage>.json` in R2 when configured
 - Preview stages: `pr-<number>` with suffixed Worker name `<base>-pr-<number>`
+- Per-stage vars: `.monolith/vars.<stage>.json` merged at deploy/dev
 
 Production and dev stages use the wrangler config name as-is.
 
-## M1 boundaries
+## M1+ boundaries
 
-- Local JSON state only (no remote backend)
-- Wrangler subprocess for deploy (no direct Workers API deploy in M1)
+- Local JSON state default; R2 remote opt-in
+- Wrangler subprocess for deploy (no direct Workers API deploy)
 - No preview SaaS — preview stages are CLI + CI convention
+- `@monolith/effect` adapter stub — CLI remains async-first
 
 See [product-spec.md](./product-spec.md) for Phase 0–2 roadmap.

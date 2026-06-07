@@ -82,12 +82,12 @@ describe("runDev", () => {
     const projectDir = await createProjectWithState()
     const runWrangler = vi.fn(async () => ({ exitCode: 0 }))
 
-    const code = await runDev(["--stage", "dev"], {
+    const code = await runDev(["--stage", "dev", "--watch"], {
       projectDir,
       runWrangler
     })
 
     expect(code).toBe(0)
-    expect(runWrangler).toHaveBeenCalledWith(projectDir, "wrangler.jsonc")
+    expect(runWrangler).toHaveBeenCalledWith(projectDir, "wrangler.jsonc", ["--watch"])
   })
 })

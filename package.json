@@ -1,6 +1,6 @@
 {
   "name": "monolith",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "TypeScript IaC for Cloudflare Workers",
   "license": "Apache-2.0",
@@ -16,7 +16,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b && tsc -p tsconfig.run.json",
-    "test": "pnpm --filter @monolith/core test && pnpm --filter @monolith/cloudflare test && pnpm --filter @monolith/cli test && pnpm --filter create-monolith test",
+    "test": "pnpm --filter @monolith/core test && pnpm --filter @monolith/cloudflare test && pnpm --filter @monolith/cli test && pnpm --filter create-monolith test && pnpm --filter @monolith/hono test && pnpm --filter @monolith/effect test",
     "test:integration": "pnpm --filter @monolith/cli test:integration",
     "test:live": "pnpm --filter @monolith/cli test:live",
     "monolith": "node packages/cli/bin/monolith.js",

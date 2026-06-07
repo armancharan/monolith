@@ -1,5 +1,5 @@
 /**
- * M1 CLI commands — C1 import, C2 whoami, C5 state, C6 plan, C7 deploy, C8 typegen wired.
+ * M1 CLI commands — import, plan, deploy, dev, test, state, typegen wired.
  */
 import { runDeploy } from "./deploy.js"
 import { runDev } from "./dev.js"
@@ -7,6 +7,7 @@ import { runDestroy } from "./destroy.js"
 import { runImport } from "./import.js"
 import { runPlan } from "./plan.js"
 import { runStateInit } from "./state.js"
+import { runStatePull, runStatePush } from "./state-remote.js"
 import { runTest } from "./test.js"
 import { runTypegen } from "./typegen.js"
 import { runWhoami } from "./whoami.js"
@@ -47,7 +48,15 @@ export async function runCommand(name: CommandName, args: string[]): Promise<num
       if (args[0] === "init") {
         return runStateInit(args.slice(1))
       }
-      console.error("Usage: monolith state init --stage <name> [--from <import.json>]")
+      if (args[0] === "pull") {
+        return runStatePull(args.slice(1))
+      }
+      if (args[0] === "push") {
+        return runStatePush(args.slice(1))
+      }
+      console.error(
+        "Usage: monolith state init|pull|push --stage <name> [--from <import.json>] [--preview]"
+      )
       return 1
     case "typegen":
       return runTypegen(args)
@@ -64,10 +73,12 @@ Usage:
   monolith init
   monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>] [--preview]
   monolith state init --stage <name> [--from .monolith/import/<hash>.json]
+  monolith state pull --stage <name>   # remote R2 backend (MONOLITH_STATE_BACKEND=r2)
+  monolith state push --stage <name>
   monolith whoami [--account-id]
   monolith plan [--stage <name>] [--preview] [--cloud] [--no-cloud]
   monolith typegen --stage <name>
-  monolith dev [--stage <name>] [--preview]
+  monolith dev [--stage <name>] [--preview] [--watch]
   monolith deploy [--stage <name>] [--preview] [--auto-approve]
   monolith destroy [--stage <name>] [--preview] [--auto-approve]
   monolith test [--stage <name>] [--preview] [--destroy-after]
@@ -77,6 +88,7 @@ Pass --stage on import to seed .monolith/state/<stage>.json from the snapshot.
 Preview stages use names like pr-123 (state: .monolith/state/pr-123.json).
 --preview resolves stage from MONOLITH_PREVIEW_ID or GITHUB_PR_NUMBER (e.g. pr-42).
 Preview deploy suffixes the worker name (my-worker-pr-123) via a temp wrangler config.
+Per-stage wrangler vars: .monolith/vars.<stage>.json (merged at deploy/dev).
 import and plan also emit src/monolith.env.d.ts (or beside worker main) with MonolithEnv.
 plan merges partial cloud drift hints when Cloudflare auth is available (--cloud to require, --no-cloud to skip).
 dev runs \`npx wrangler dev\` using project wrangler config or a temp config from state/import.
@@ -84,6 +96,6 @@ deploy runs \`npx wrangler deploy\` in the project directory (default stage: dev
 deploy checks plan first; pass --auto-approve to skip when changes are pending.
 destroy runs plan, then \`npx wrangler delete <worker>\` when --auto-approve is set.
 destroy clears local stage state; D1/KV/R2 buckets are NOT deleted from Cloudflare (bindings only).
-test runs plan guard, deploy (--auto-approve), optional HTTP smoke (MONOLITH_TEST_URL or state workerUrl), optional --destroy-after teardown.
-Place future assertions in .monolith/test/assertions.json.`)
+test runs plan guard, deploy (--auto-approve), route assertions (.monolith/test/assertions.json), optional HTTP smoke, optional --destroy-after teardown.
+Remote state (optional): MONOLITH_STATE_BACKEND=r2, MONOLITH_STATE_R2_BUCKET, R2 API credentials.`)
 }
