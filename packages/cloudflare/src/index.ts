@@ -13,7 +13,9 @@ export {
   type CloudflareStackConfigure,
   type CloudflareStackContext,
   type D1Database,
+  type DurableObjectBinding,
   type KvNamespace,
+  type QueueBinding,
   type R2Bucket,
   type WorkerResource
 } from "./stack.js"
@@ -27,6 +29,7 @@ export {
   toStackResources,
   WranglerParseError,
   type WranglerD1Database,
+  type WranglerDurableObject,
   type WranglerImportResult,
   type WranglerImportSnapshot,
   type WranglerKvNamespace,

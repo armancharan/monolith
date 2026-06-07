@@ -65,6 +65,8 @@ describe("parseWranglerConfigText", () => {
         namespaceId: "58e35e39e0ba4816b1d5d666898b55be"
       }
     ])
+    expect(resources.queues).toEqual([])
+    expect(resources.durableObjects).toEqual([])
   })
 
   it("generates monolith.run.ts from import result", () => {
@@ -123,5 +125,55 @@ queue = "jobs-queue"
     expect(result.queues).toEqual([
       { binding: "JOBS", queueName: "jobs-queue" }
     ])
+  })
+
+  it("parses durable object bindings from wrangler jsonc", () => {
+    const jsonc = `
+{
+  "name": "do-worker",
+  "main": "src/index.ts",
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "ChatRoom", "script_name": "chat-do" }
+    ]
+  }
+}
+`
+    const result = parseWranglerConfigText(jsonc, "/tmp/wrangler.jsonc")
+
+    expect(result.workerName).toBe("do-worker")
+    expect(result.durableObjects).toEqual([
+      { binding: "ROOMS", className: "ChatRoom", scriptName: "chat-do" }
+    ])
+
+    const resources = toStackResources(result)
+    expect(resources.durableObjects).toEqual([
+      {
+        type: "durable_object",
+        name: "ROOMS",
+        className: "ChatRoom",
+        scriptName: "chat-do"
+      }
+    ])
+  })
+
+  it("generates ctx.queue and ctx.durableObject in monolith.run.ts", () => {
+    const toml = `
+name = "full-worker"
+main = "src/index.ts"
+
+[[queues.producers]]
+binding = "JOBS"
+queue = "jobs-queue"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "ChatRoom"
+`
+    const result = parseWranglerConfigText(toml, "/tmp/wrangler.toml")
+    const generated = generateMonolithRunTs(result)
+
+    expect(generated).toContain('ctx.queue("JOBS"')
+    expect(generated).toContain('ctx.durableObject("ROOMS"')
   })
 })

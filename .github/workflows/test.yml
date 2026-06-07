@@ -1,0 +1,71 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Optional scheduled live smoke — disabled by default.
+  # To enable: uncomment schedule below and add repository secrets
+  # CLOUDFLARE_API_TOKEN (and optionally MONOLITH_LIVE_WORKER_URL).
+  # schedule:
+  #   - cron: "0 6 * * 1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+  # Live-cloud smoke — gated; does not run on PRs by default.
+  # Enable by uncommenting schedule above and setting secrets, then flip if to true.
+  live-smoke:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Live smoke tests
+        env:
+          MONOLITH_LIVE_TESTS: "1"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MONOLITH_LIVE_WORKER_URL: ${{ secrets.MONOLITH_LIVE_WORKER_URL }}
+        run: pnpm test:live

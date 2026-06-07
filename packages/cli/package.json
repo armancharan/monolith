@@ -15,8 +15,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "test:integration": "vitest run tests/integration"
+    "test": "vitest run --exclude tests/live/**",
+    "test:integration": "vitest run tests/integration",
+    "test:live": "vitest run tests/live"
   },
   "dependencies": {
     "@monolith/cloudflare": "workspace:*",

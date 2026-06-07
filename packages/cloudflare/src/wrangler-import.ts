@@ -5,7 +5,9 @@ import { parse as parseJsonc } from "jsonc-parser"
 import { parse as parseToml } from "smol-toml"
 import type {
   D1Database,
+  DurableObjectBinding,
   KvNamespace,
+  QueueBinding,
   R2Bucket,
   WorkerResource
 } from "./stack.js"
@@ -32,6 +34,12 @@ export interface WranglerR2Bucket {
   bucketName?: string
 }
 
+export interface WranglerDurableObject {
+  binding: string
+  className: string
+  scriptName?: string
+}
+
 export interface WranglerImportResult {
   sourcePath: string
   configBasename: string
@@ -42,6 +50,7 @@ export interface WranglerImportResult {
   kvNamespaces: WranglerKvNamespace[]
   queues: WranglerQueue[]
   r2Buckets: WranglerR2Bucket[]
+  durableObjects: WranglerDurableObject[]
 }
 
 export interface WranglerImportSnapshot extends Omit<WranglerImportResult, "sourcePath"> {
@@ -54,6 +63,8 @@ export interface WranglerStackResources {
   d1: D1Database[]
   kv: KvNamespace[]
   r2: R2Bucket[]
+  queues: QueueBinding[]
+  durableObjects: DurableObjectBinding[]
 }
 
 interface RawWranglerConfig {
@@ -87,6 +98,13 @@ interface RawWranglerConfig {
     binding?: string
     bucket_name?: string
   }>
+  durable_objects?: {
+    bindings?: Array<{
+      name?: string
+      class_name?: string
+      script_name?: string
+    }>
+  }
 }
 
 export class WranglerParseError extends Error {
@@ -163,6 +181,23 @@ function normalizeQueues(raw: RawWranglerConfig["queues"]): WranglerQueue[] {
   })
 }
 
+function normalizeDurableObjects(
+  raw: RawWranglerConfig["durable_objects"]
+): WranglerDurableObject[] {
+  return (raw?.bindings ?? []).flatMap((entry) => {
+    const binding = entry.name?.trim()
+    const className = entry.class_name?.trim()
+    if (!binding || !className) {
+      return []
+    }
+    return [{
+      binding,
+      className,
+      scriptName: entry.script_name?.trim()
+    }]
+  })
+}
+
 function normalizeConfig(
   raw: RawWranglerConfig,
   sourcePath: string,
@@ -210,7 +245,8 @@ function normalizeConfig(
     d1Databases,
     kvNamespaces,
     queues: normalizeQueues(raw.queues),
-    r2Buckets
+    r2Buckets,
+    durableObjects: normalizeDurableObjects(raw.durable_objects)
   }
 }
 
@@ -268,6 +304,18 @@ export function toStackResources(result: WranglerImportResult): WranglerStackRes
       type: "r2",
       name: entry.binding,
       bucketName: entry.bucketName
+    })),
+    queues: result.queues.map((entry) => ({
+      type: "queue",
+      name: entry.binding,
+      queueName: entry.queueName,
+      id: entry.id
+    })),
+    durableObjects: result.durableObjects.map((entry) => ({
+      type: "durable_object",
+      name: entry.binding,
+      className: entry.className,
+      scriptName: entry.scriptName
     }))
   }
 }
@@ -300,6 +348,13 @@ export function formatImportSummary(result: WranglerImportResult): string {
   for (const entry of result.queues) {
     const target = entry.queueName ?? entry.id ?? "(unnamed queue)"
     lines.push(`  Queue: ${entry.binding} → ${target}`)
+  }
+
+  for (const entry of result.durableObjects) {
+    const target = entry.scriptName
+      ? `${entry.className} (script: ${entry.scriptName})`
+      : entry.className
+    lines.push(`  Durable Object: ${entry.binding} → ${target}`)
   }
 
   return lines.join("\n")
@@ -336,8 +391,27 @@ export function generateMonolithRunTs(result: WranglerImportResult): string {
   }
 
   for (const entry of result.queues) {
+    if (entry.queueName) {
+      lines.push(
+        `  ctx.queue(${JSON.stringify(entry.binding)}, { queueName: ${JSON.stringify(entry.queueName)} })`
+      )
+    } else if (entry.id) {
+      lines.push(
+        `  ctx.queue(${JSON.stringify(entry.binding)}, { id: ${JSON.stringify(entry.id)} })`
+      )
+    } else {
+      lines.push(`  ctx.queue(${JSON.stringify(entry.binding)})`)
+    }
+  }
+
+  for (const entry of result.durableObjects) {
+    const opts: string[] = []
+    opts.push(`className: ${JSON.stringify(entry.className)}`)
+    if (entry.scriptName) {
+      opts.push(`scriptName: ${JSON.stringify(entry.scriptName)}`)
+    }
     lines.push(
-      `  // Queue binding ${entry.binding} — ctx.queue() lands in C4`
+      `  ctx.durableObject(${JSON.stringify(entry.binding)}, { ${opts.join(", ")} })`
     )
   }
 

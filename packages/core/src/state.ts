@@ -29,6 +29,8 @@ export interface StateResource {
   databaseId?: string
   namespaceId?: string
   bucketName?: string
+  className?: string
+  scriptName?: string
 }
 
 export interface ImportSnapshot {
@@ -51,6 +53,11 @@ export interface ImportSnapshot {
     binding: string
     queueName?: string
     id?: string
+  }>
+  durableObjects?: Array<{
+    binding: string
+    className: string
+    scriptName?: string
   }>
 }
 
@@ -111,6 +118,17 @@ export function resourcesFromImport(snapshot: ImportSnapshot): StateResource[] {
       kind: "queue",
       binding: entry.binding,
       name: entry.queueName ?? entry.id
+    })
+  }
+
+  for (const entry of snapshot.durableObjects ?? []) {
+    resources.push({
+      id: `durable_object:${entry.binding}`,
+      kind: "durable_object",
+      binding: entry.binding,
+      name: entry.className,
+      className: entry.className,
+      scriptName: entry.scriptName
     })
   }
 

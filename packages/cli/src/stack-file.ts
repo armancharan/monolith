@@ -21,6 +21,10 @@ interface ParsedBinding {
   databaseId?: string
   namespaceId?: string
   bucketName?: string
+  queueName?: string
+  id?: string
+  className?: string
+  scriptName?: string
 }
 
 export interface ParsedStackFile {
@@ -29,6 +33,8 @@ export interface ParsedStackFile {
   d1: ParsedBinding[]
   kv: ParsedBinding[]
   r2: ParsedBinding[]
+  queues: ParsedBinding[]
+  durableObjects: ParsedBinding[]
 }
 
 function parseOptsBlock(optsText: string | undefined): Record<string, string> {
@@ -48,7 +54,7 @@ function parseOptsBlock(optsText: string | undefined): Record<string, string> {
 
 function parseBindingCalls(
   content: string,
-  method: "d1" | "kv" | "r2"
+  method: "d1" | "kv" | "r2" | "queue" | "durableObject"
 ): ParsedBinding[] {
   const bindings: ParsedBinding[] = []
   const pattern = new RegExp(
@@ -63,7 +69,11 @@ function parseBindingCalls(
       binding,
       databaseId: opts.databaseId,
       namespaceId: opts.namespaceId,
-      bucketName: opts.bucketName
+      bucketName: opts.bucketName,
+      queueName: opts.queueName,
+      id: opts.id,
+      className: opts.className,
+      scriptName: opts.scriptName
     })
     match = pattern.exec(content)
   }
@@ -83,7 +93,9 @@ export function parseStackFileContent(content: string): ParsedStackFile | undefi
     workerName: workerMatch?.[1],
     d1: parseBindingCalls(content, "d1"),
     kv: parseBindingCalls(content, "kv"),
-    r2: parseBindingCalls(content, "r2")
+    r2: parseBindingCalls(content, "r2"),
+    queues: parseBindingCalls(content, "queue"),
+    durableObjects: parseBindingCalls(content, "durableObject")
   }
 }
 
@@ -127,12 +139,38 @@ function mergeStackWithSnapshot(
         })
       : base.r2Buckets
 
+  const queues =
+    parsed.queues.length > 0
+      ? parsed.queues.map(({ binding, queueName, id }) => {
+          const fromBase = base.queues?.find((entry) => entry.binding === binding)
+          return {
+            binding,
+            queueName: fromBase?.queueName ?? queueName,
+            id: fromBase?.id ?? id
+          }
+        })
+      : base.queues
+
+  const durableObjects =
+    parsed.durableObjects.length > 0
+      ? parsed.durableObjects.map(({ binding, className, scriptName }) => {
+          const fromBase = base.durableObjects?.find((entry) => entry.binding === binding)
+          return {
+            binding,
+            className: fromBase?.className ?? className ?? binding,
+            scriptName: fromBase?.scriptName ?? scriptName
+          }
+        })
+      : base.durableObjects
+
   return {
     ...base,
     workerName,
     d1Databases,
     kvNamespaces,
-    r2Buckets
+    r2Buckets,
+    queues,
+    durableObjects
   }
 }
 

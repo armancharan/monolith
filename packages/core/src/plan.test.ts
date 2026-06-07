@@ -130,6 +130,35 @@ describe("planState", () => {
     expect(output).toContain("[binding change]")
   })
 
+  it("detects queue and durable object binding changes", () => {
+    const current = baseState([
+      { id: "worker:demo-worker", kind: "worker", name: "demo-worker" }
+    ])
+    const desired = baseState([
+      { id: "worker:demo-worker", kind: "worker", name: "demo-worker" },
+      {
+        id: "queue:JOBS",
+        kind: "queue",
+        binding: "JOBS",
+        name: "jobs-queue"
+      },
+      {
+        id: "durable_object:ROOMS",
+        kind: "durable_object",
+        binding: "ROOMS",
+        name: "ChatRoom",
+        className: "ChatRoom"
+      }
+    ])
+
+    const result = planState(current, desired)
+    expect(result.hasChanges).toBe(true)
+    expect(result.changes.map((change) => change.resource.id)).toEqual([
+      "durable_object:ROOMS",
+      "queue:JOBS"
+    ])
+  })
+
   it("formats no-op plan output", () => {
     const state = baseState([
       { id: "worker:demo-worker", kind: "worker", name: "demo-worker" }

@@ -22,6 +22,20 @@ export default stack("my-stack", async (ctx) => {
     expect(parsed?.d1).toEqual([{ binding: "DB", databaseId: "from-run" }])
     expect(parsed?.kv).toEqual([{ binding: "CACHE" }])
   })
+
+  it("extracts queue and durable object declarations", () => {
+    const content = `
+export default stack("jobs", async (ctx) => {
+  ctx.queue("JOBS", { queueName: "jobs-queue" })
+  ctx.durableObject("ROOMS", { className: "ChatRoom" })
+})
+`
+    const parsed = parseStackFileContent(content)
+    expect(parsed?.queues).toEqual([{ binding: "JOBS", queueName: "jobs-queue" }])
+    expect(parsed?.durableObjects).toEqual([
+      { binding: "ROOMS", className: "ChatRoom" }
+    ])
+  })
 })
 
 describe("loadDesiredFromStackFile", () => {
@@ -70,5 +84,44 @@ describe("loadDesiredFromStackFile", () => {
     expect(desired?.stackName).toBe("api")
     expect(desired?.resources.find((r) => r.id === "d1:DB")?.databaseId).toBe("import-id")
     expect(desired?.resources.find((r) => r.id === "kv:KV")?.namespaceId).toBe("kv-id")
+  })
+
+  it("merges queue and durable object bindings into desired state", async () => {
+    const projectDir = join(tmpdir(), `monolith-stack-file-${Date.now()}`)
+    tempDirs.push(projectDir)
+    await mkdir(projectDir, { recursive: true })
+
+    await writeFile(
+      join(projectDir, "monolith.run.ts"),
+      `export default stack("my-stack", async (ctx) => {
+  ctx.queue("JOBS")
+  ctx.durableObject("ROOMS", { className: "ChatRoom" })
+})
+`
+    )
+
+    const base: ImportSnapshot = {
+      workerName: "wrangler-worker",
+      contentHash: "abc",
+      queues: [{ binding: "JOBS", queueName: "jobs-queue" }],
+      durableObjects: [{ binding: "ROOMS", className: "ChatRoom", scriptName: "chat-do" }]
+    }
+
+    const desired = await loadDesiredFromStackFile(
+      projectDir,
+      {
+        stackName: "wrangler-worker",
+        stage: "dev",
+        resources: [],
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        wranglerConfigPath: "wrangler.jsonc"
+      },
+      base
+    )
+
+    expect(desired?.resources.find((r) => r.id === "queue:JOBS")?.name).toBe("jobs-queue")
+    expect(desired?.resources.find((r) => r.id === "durable_object:ROOMS")?.className).toBe(
+      "ChatRoom"
+    )
   })
 })

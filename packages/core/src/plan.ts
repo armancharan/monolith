@@ -23,14 +23,15 @@ export interface PlanResult {
   desiredSource: PlanDesiredSource
 }
 
-const BINDING_KINDS = new Set(["d1", "kv", "r2", "queue"])
+const BINDING_KINDS = new Set(["d1", "kv", "r2", "queue", "durable_object"])
 
 const COMPARE_FIELDS: Record<string, readonly (keyof StateResource)[]> = {
   worker: ["name"],
   d1: ["binding", "name", "databaseId"],
   kv: ["binding", "namespaceId"],
   r2: ["binding", "bucketName"],
-  queue: ["binding", "name"]
+  queue: ["binding", "name"],
+  durable_object: ["binding", "name", "className", "scriptName"]
 }
 
 function resourceIndex(resources: readonly StateResource[]): Map<string, StateResource> {

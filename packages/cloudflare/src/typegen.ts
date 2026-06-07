@@ -8,7 +8,8 @@ const KIND_TO_TS: Record<string, string> = {
   d1: "D1Database",
   kv: "KVNamespace",
   r2: "R2Bucket",
-  queue: "Queue"
+  queue: "Queue",
+  durable_object: "DurableObjectNamespace"
 }
 
 export interface BindingTypeEntry {
@@ -38,6 +39,10 @@ export function bindingEntriesFromImportResult(result: WranglerImportResult): Bi
 
   for (const entry of result.queues) {
     entries.push({ binding: entry.binding, tsType: "Queue" })
+  }
+
+  for (const entry of result.durableObjects) {
+    entries.push({ binding: entry.binding, tsType: "DurableObjectNamespace" })
   }
 
   return entries

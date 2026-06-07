@@ -13,6 +13,7 @@
     "typecheck": "tsc -b && tsc -p tsconfig.run.json",
     "test": "pnpm --filter @monolith/core test && pnpm --filter @monolith/cloudflare test && pnpm --filter @monolith/cli test",
     "test:integration": "pnpm --filter @monolith/cli test:integration",
+    "test:live": "pnpm --filter @monolith/cli test:live",
     "monolith": "node packages/cli/bin/monolith.js"
   },
   "devDependencies": {
