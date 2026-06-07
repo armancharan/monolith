@@ -1,5 +1,7 @@
 # Monolith
 
+[![GitHub](https://img.shields.io/badge/GitHub-armancharan%2Fmonolith-181717?logo=github)](https://github.com/armancharan/monolith)
+
 TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony or Effect lock-in. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `monolith.run.ts`, get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production.
 
 **Portfolio id:** Perch (experiment) · **M1 codename:** Monolith  
