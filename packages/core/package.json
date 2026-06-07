@@ -1,7 +1,6 @@
 {
   "name": "@monolith/core",
   "version": "0.3.0",
-  "private": true,
   "type": "module",
   "exports": {
     ".": {
@@ -19,5 +18,8 @@
   },
   "devDependencies": {
     "vitest": "^3.2.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

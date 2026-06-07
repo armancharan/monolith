@@ -1,6 +1,6 @@
 {
   "name": "@monolith/hono",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Hono preset for Monolith Cloudflare Workers",
   "license": "Apache-2.0",
   "repository": {

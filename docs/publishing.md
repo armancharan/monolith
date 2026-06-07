@@ -53,9 +53,40 @@ Requires npm login with publish rights to `@monolith` scope (create org at npmjs
 
 ### Status (2026-06-07)
 
-**Blocked:** `npm whoami` → `ENEEDAUTH` (not logged in on this machine).
+**Auth:** `npm whoami` → `armancharan` (session login OK).
 
-Dry-run previously succeeded for `@monolith/cli@0.2.0` (~45 kB tarball, public access). v0.3.0 packages ready; publish pending auth + `@monolith` org scope.
+**Build:** `pnpm build` passes. Manifests prepared for npm: `private` removed on `@monolith/core`, `@monolith/cloudflare`, `create-monolith`; `@monolith/hono` bumped to **0.3.0**; `create-monolith` bumped to **0.3.0** with `publishConfig.access: public`.
+
+**Blocked on publish:** `npm publish --access public` for `@monolith/core@0.3.0` → **E403** — npm requires **2FA on the account** (auth-and-writes) **or** a **granular access token** with publish rights (automation / bypass-2fa). Session from `npm login` alone is not enough.
+
+**Unblock (pick one):**
+
+```bash
+# A) Enable 2FA, then publish with OTP per package
+npm profile enable-2fa auth-and-writes
+cd packages/core && npm publish --access public --otp=<code>
+# … repeat dependency order: cloudflare → effect → hono → cli → create-monolith
+
+# B) Granular token (npmjs.com → Access Tokens → Generate New Token → Publish)
+export NPM_TOKEN=npm_…
+npm config set //registry.npmjs.org/:_authToken="$NPM_TOKEN"
+pnpm -r publish --access public --no-git-checks
+```
+
+**Scope:** `@monolith/*` not yet on registry (404). First successful publish under your account should claim the scope if the org exists / you have rights.
+
+Dry-run OK for `@monolith/effect@0.3.0` (~23 kB tarball, public access).
+
+### Published (fill after successful publish)
+
+| Package | Version | Published (UTC) | URL |
+| --- | --- | --- | --- |
+| `@monolith/core` | 0.3.0 | — | https://www.npmjs.com/package/@monolith/core |
+| `@monolith/cloudflare` | 0.3.0 | — | https://www.npmjs.com/package/@monolith/cloudflare |
+| `@monolith/effect` | 0.3.0 | — | https://www.npmjs.com/package/@monolith/effect |
+| `@monolith/hono` | 0.3.0 | — | https://www.npmjs.com/package/@monolith/hono |
+| `@monolith/cli` | 0.3.0 | — | https://www.npmjs.com/package/@monolith/cli |
+| `create-monolith` | 0.3.0 | — | https://www.npmjs.com/package/create-monolith |
 
 **After publish, verify:**
 

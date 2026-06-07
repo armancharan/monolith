@@ -1,7 +1,6 @@
 {
   "name": "create-monolith",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.3.0",
   "description": "Scaffold a Monolith + Hono Worker project with D1 and KV",
   "type": "module",
   "bin": {
@@ -22,5 +21,8 @@
   ],
   "devDependencies": {
     "vitest": "^3.2.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
