@@ -1,6 +1,16 @@
+import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 import { formatCloudPlan, formatPlan, planState } from "./plan.js"
+import { PlanEngine, PlanEngineLive } from "./services/PlanEngine.js"
 import type { MonolithState } from "./state.js"
+
+const runPlan = (current: MonolithState, desired: MonolithState) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const engine = yield* PlanEngine
+      return yield* engine.plan(current, desired)
+    }).pipe(Effect.provide(PlanEngineLive))
+  )
 
 const baseState = (resources: MonolithState["resources"]): MonolithState => ({
   stackName: "demo-worker",
@@ -167,6 +177,26 @@ describe("planState", () => {
     const output = formatPlan("dev", state, result)
 
     expect(output).toContain("No changes. Infrastructure matches desired state.")
+  })
+
+  it("PlanEngine matches pure planState", async () => {
+    const current = baseState([
+      { id: "worker:demo-worker", kind: "worker", name: "demo-worker" }
+    ])
+    const desired = baseState([
+      { id: "worker:demo-worker", kind: "worker", name: "demo-worker" },
+      {
+        id: "kv:KV",
+        kind: "kv",
+        binding: "KV",
+        namespaceId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ])
+
+    const pure = planState(current, desired)
+    const viaEngine = await runPlan(current, desired)
+    expect(viaEngine.hasChanges).toBe(pure.hasChanges)
+    expect(viaEngine.changes).toEqual(pure.changes)
   })
 
   it("formats cloud plan with drift and pending sections", () => {

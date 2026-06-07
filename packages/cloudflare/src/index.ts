@@ -1,12 +1,27 @@
-export { resolveCloudflareAuth, CloudflareAuthError, type AuthSource, type ResolvedAuth } from "./auth.js"
+export {
+  CloudflareAuthError,
+  CloudflareApiError,
+  WranglerError,
+  WranglerParseError
+} from "./errors.js"
+export { resolveCloudflareAuth, type AuthSource, type ResolvedAuth } from "./auth.js"
 export {
   CloudflareClient,
-  CloudflareApiError,
+  CloudflareClientLive,
+  makeCloudflareClient,
+  makeCloudflareClientLayer,
   type CloudflareAccount,
   type CloudflareUser,
+  type MakeCloudflareClientOptions,
   type WhoamiResult
-} from "./client.js"
-export { ok, err, type Result } from "./result.js"
+} from "./services/CloudflareClient.js"
+export {
+  WranglerDeployer,
+  WranglerDeployerLive,
+  makeWranglerDeployer,
+  type WranglerDeployOutcome as WranglerDeployerOutcome
+} from "./services/WranglerDeployer.js"
+export { CloudflareLive, makeCloudflareLive } from "./live.js"
 export {
   stack,
   type CloudflareBinding,
@@ -27,7 +42,6 @@ export {
   parseWranglerConfigText,
   toImportSnapshot,
   toStackResources,
-  WranglerParseError,
   type WranglerD1Database,
   type WranglerDurableObject,
   type WranglerDurableObjectMigration,
@@ -58,6 +72,7 @@ export {
   type CloudDeploymentHint,
   type CloudDriftHints,
   type CloudWorkerReadResult,
+  type CloudflareClientService,
   type ReadActualStackOptions,
   type ReadCloudWorkerOptions,
   type RunWranglerDeploymentsList

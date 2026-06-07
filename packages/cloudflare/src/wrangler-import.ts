@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { basename, extname } from "node:path"
 import { parse as parseJsonc } from "jsonc-parser"
 import { parse as parseToml } from "smol-toml"
+import { WranglerParseError } from "./errors.js"
 import type {
   D1Database,
   DurableObjectBinding,
@@ -123,16 +124,9 @@ interface RawWranglerConfig {
   }
 }
 
-export class WranglerParseError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "WranglerParseError"
-  }
-}
-
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
-    throw new WranglerParseError(`Missing or invalid wrangler field: ${field}`)
+    throw new WranglerParseError({ message: `Missing or invalid wrangler field: ${field}` })
   }
   return value
 }
@@ -142,12 +136,12 @@ function parseWranglerJson(text: string, sourceLabel: string): RawWranglerConfig
   const parsed = parseJsonc(text, errors, { allowTrailingComma: true })
   if (errors.length > 0) {
     const first = errors[0]
-    throw new WranglerParseError(
-      `Failed to parse ${sourceLabel} at offset ${first.offset}: ${first.error}`
-    )
+    throw new WranglerParseError({
+      message: `Failed to parse ${sourceLabel} at offset ${first.offset}: ${first.error}`
+    })
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new WranglerParseError(`Expected wrangler config object in ${sourceLabel}`)
+    throw new WranglerParseError({ message: `Expected wrangler config object in ${sourceLabel}` })
   }
   return parsed as RawWranglerConfig
 }
@@ -156,12 +150,12 @@ function parseWranglerToml(text: string, sourceLabel: string): RawWranglerConfig
   try {
     const parsed = parseToml(text)
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new WranglerParseError(`Expected wrangler config object in ${sourceLabel}`)
+      throw new WranglerParseError({ message: `Expected wrangler config object in ${sourceLabel}` })
     }
     return parsed as RawWranglerConfig
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new WranglerParseError(`Failed to parse ${sourceLabel}: ${message}`)
+    throw new WranglerParseError({ message: `Failed to parse ${sourceLabel}: ${message}` })
   }
 }
 
@@ -407,45 +401,47 @@ export function formatImportSummary(result: WranglerImportResult): string {
 
 export function generateMonolithRunTs(result: WranglerImportResult): string {
   const lines = [
+    'import { Effect } from "effect"',
     'import { stack } from "@monolith/cloudflare"',
     "",
-    `export default stack(${JSON.stringify(result.workerName)}, async (ctx) => {`,
-    `  ctx.worker(${JSON.stringify(result.workerName)})`
+    `export default stack(${JSON.stringify(result.workerName)}, (ctx) =>`,
+    "  Effect.gen(function* () {",
+    `    yield* ctx.worker(${JSON.stringify(result.workerName)})`
   ]
 
   for (const entry of result.d1Databases) {
     lines.push(
-      `  ctx.d1(${JSON.stringify(entry.binding)}, { databaseId: ${JSON.stringify(entry.databaseId)} })`
+      `    yield* ctx.d1(${JSON.stringify(entry.binding)}, { databaseId: ${JSON.stringify(entry.databaseId)} })`
     )
   }
 
   for (const entry of result.kvNamespaces) {
     lines.push(
-      `  ctx.kv(${JSON.stringify(entry.binding)}, { namespaceId: ${JSON.stringify(entry.id)} })`
+      `    yield* ctx.kv(${JSON.stringify(entry.binding)}, { namespaceId: ${JSON.stringify(entry.id)} })`
     )
   }
 
   for (const entry of result.r2Buckets) {
     if (entry.bucketName) {
       lines.push(
-        `  ctx.r2(${JSON.stringify(entry.binding)}, { bucketName: ${JSON.stringify(entry.bucketName)} })`
+        `    yield* ctx.r2(${JSON.stringify(entry.binding)}, { bucketName: ${JSON.stringify(entry.bucketName)} })`
       )
     } else {
-      lines.push(`  ctx.r2(${JSON.stringify(entry.binding)})`)
+      lines.push(`    yield* ctx.r2(${JSON.stringify(entry.binding)})`)
     }
   }
 
   for (const entry of result.queues) {
     if (entry.queueName) {
       lines.push(
-        `  ctx.queue(${JSON.stringify(entry.binding)}, { queueName: ${JSON.stringify(entry.queueName)} })`
+        `    yield* ctx.queue(${JSON.stringify(entry.binding)}, { queueName: ${JSON.stringify(entry.queueName)} })`
       )
     } else if (entry.id) {
       lines.push(
-        `  ctx.queue(${JSON.stringify(entry.binding)}, { id: ${JSON.stringify(entry.id)} })`
+        `    yield* ctx.queue(${JSON.stringify(entry.binding)}, { id: ${JSON.stringify(entry.id)} })`
       )
     } else {
-      lines.push(`  ctx.queue(${JSON.stringify(entry.binding)})`)
+      lines.push(`    yield* ctx.queue(${JSON.stringify(entry.binding)})`)
     }
   }
 
@@ -456,11 +452,12 @@ export function generateMonolithRunTs(result: WranglerImportResult): string {
       opts.push(`scriptName: ${JSON.stringify(entry.scriptName)}`)
     }
     lines.push(
-      `  ctx.durableObject(${JSON.stringify(entry.binding)}, { ${opts.join(", ")} })`
+      `    yield* ctx.durableObject(${JSON.stringify(entry.binding)}, { ${opts.join(", ")} })`
     )
   }
 
-  lines.push("})")
+  lines.push("  })")
+  lines.push(")")
   lines.push("")
   return lines.join("\n")
 }

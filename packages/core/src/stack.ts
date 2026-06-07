@@ -1,3 +1,4 @@
+import type { Effect } from "effect"
 import { statePath } from "./paths.js"
 
 export interface StackContext {
@@ -7,7 +8,7 @@ export interface StackContext {
   statePath: string
 }
 
-export type StackConfigure = (ctx: StackContext) => Promise<void>
+export type StackConfigure = (ctx: StackContext) => Effect.Effect<void, never>
 
 export interface StackModule {
   name: string

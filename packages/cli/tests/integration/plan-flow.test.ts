@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { runImport } from "../../src/import.js"
 import { evaluatePlan } from "../../src/plan.js"
+import { runCli } from "../../src/runtime.js"
 import { createFixtureProject } from "./helpers.js"
 
 describe("plan flow integration", () => {
@@ -16,11 +17,14 @@ describe("plan flow integration", () => {
     const projectDir = await createFixtureProject()
     tempDirs.push(projectDir)
 
-    const importCode = await runImport([
-      join(projectDir, "wrangler.jsonc"),
-      "--stage",
-      "dev"
-    ])
+    const importCode = await runCli(
+      projectDir,
+      runImport([
+        join(projectDir, "wrangler.jsonc"),
+        "--stage",
+        "dev"
+      ])
+    )
     expect(importCode).toBe(0)
 
     const wranglerPath = join(projectDir, "wrangler.jsonc")
@@ -31,13 +35,9 @@ describe("plan flow integration", () => {
     )
     await writeFile(wranglerPath, mutated)
 
-    const evaluated = await evaluatePlan("dev", projectDir)
-    expect(evaluated.ok).toBe(true)
-    if (!evaluated.ok) {
-      return
-    }
+    const evaluated = await runCli(projectDir, evaluatePlan("dev", projectDir))
 
-    expect(evaluated.value.pending.hasChanges).toBe(true)
-    expect(evaluated.value.pending.changes.some((change) => change.resource.id === "kv:KV")).toBe(true)
+    expect(evaluated.pending.hasChanges).toBe(true)
+    expect(evaluated.pending.changes.some((change) => change.resource.id === "kv:KV")).toBe(true)
   })
 })

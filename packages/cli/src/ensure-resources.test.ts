@@ -9,6 +9,7 @@ import {
   parseKvNamespaceIdFromOutput,
   type RunWranglerCommand
 } from "./ensure-resources.js"
+import { runCli } from "./runtime.js"
 
 describe("isPlaceholderId", () => {
   it("detects REPLACE_ prefixes and empty values", () => {
@@ -116,17 +117,15 @@ describe("ensurePlaceholderResources", () => {
       return { exitCode: 1, output: "unexpected command" }
     }
 
-    const result = await ensurePlaceholderResources({
-      stage: "dev",
+    const result = await runCli(
       projectDir,
-      configPath: "wrangler.jsonc",
-      runWrangler: mockWrangler
-    })
-
-    expect(result.ok).toBe(true)
-    if (!result.ok) {
-      return
-    }
+      ensurePlaceholderResources({
+        stage: "dev",
+        projectDir,
+        configPath: "wrangler.jsonc",
+        runWrangler: mockWrangler
+      })
+    )
 
     const config = JSON.parse(await readFile(join(projectDir, "wrangler.jsonc"), "utf8"))
     expect(config.d1_databases[0].database_id).toBe("22222222-2222-2222-2222-222222222222")
@@ -154,13 +153,16 @@ describe("ensurePlaceholderResources", () => {
       output: "should not run\n"
     })
 
-    const result = await ensurePlaceholderResources({
-      stage: "dev",
+    const result = await runCli(
       projectDir,
-      configPath: "wrangler.jsonc",
-      runWrangler: mockWrangler
-    })
+      ensurePlaceholderResources({
+        stage: "dev",
+        projectDir,
+        configPath: "wrangler.jsonc",
+        runWrangler: mockWrangler
+      })
+    )
 
-    expect(result.ok).toBe(true)
+    expect(result.state).toBeDefined()
   })
 })

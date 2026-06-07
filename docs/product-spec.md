@@ -12,9 +12,11 @@
 
 ## What it is
 
-**Perch** is TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony or Effect lock-in. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `perch.run.ts`, get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production — then grow to AWS and Vercel without changing tools. Wrangler-compatible under the hood; Terraform-interoperable at the edges.
+**Perch** is **Effect-native** TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `perch.run.ts` using Effect (`Context.Service`, `Layer`, `Data.TaggedError`), get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production — then grow to AWS and Vercel without changing tools. Wrangler-compatible under the hood; Terraform-interoperable at the edges.
 
-**Stack:** TypeScript core (Effect-optional); esbuild + Wrangler bundler adapter; Cloudflare TypeScript SDK; local JSON state (`.perch/state/<stage>.json`); optional `@perch/effect` for Magpie-style teams.
+**Stack:** Effect-native TypeScript core (`effect@4.0.0-beta.54`); esbuild + Wrangler bundler adapter; Cloudflare TypeScript SDK; local JSON state (`.perch/state/<stage>.json`); `@perch/effect` (`MonolithLive`) for composable Layers.
+
+**Differentiation vs Alchemy:** same Effect-native stack-as-program model; Monolith differentiates on wrangler import fidelity, agency/B2D positioning, and explicit reconcile state (import → plan → deploy) rather than a generic resource graph.
 
 **Elevator pitch:** Where your stack lands — Magpie sits on a perch. CF-wedge IaC with the deploy loop latency SST owns on AWS, but native to Workers.
 

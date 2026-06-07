@@ -1,8 +1,9 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
+import { Effect } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
-import { clearState, initStateFromImport, loadState, saveState } from "./state.js"
+import { StateStore, makeStateStoreLayer } from "./services/StateStore.js"
 
 const importSnapshot = {
   workerName: "demo-worker",
@@ -18,6 +19,11 @@ const importSnapshot = {
   queues: [],
   r2Buckets: []
 }
+
+const runWithStore = <A, E>(
+  projectDir: string,
+  program: Effect.Effect<A, E, StateStore>
+) => Effect.runPromise(program.pipe(Effect.provide(makeStateStoreLayer(projectDir))))
 
 describe("state engine", () => {
   let projectDir: string
@@ -35,17 +41,18 @@ describe("state engine", () => {
     await mkdir(join(projectDir, ".monolith/import"), { recursive: true })
     await writeFile(importFile, `${JSON.stringify(importSnapshot, null, 2)}\n`, "utf8")
 
-    const initResult = await initStateFromImport(importPath, "dev", projectDir)
-    expect(initResult.ok).toBe(true)
-
-    const loadResult = await loadState("dev", projectDir)
-    expect(loadResult.ok).toBe(true)
-    if (loadResult.ok) {
-      expect(loadResult.value.stackName).toBe("demo-worker")
-      expect(loadResult.value.stage).toBe("dev")
-      expect(loadResult.value.importHash).toBe("abc123")
-      expect(loadResult.value.resources).toHaveLength(3)
-    }
+    await runWithStore(
+      projectDir,
+      Effect.gen(function* () {
+        const store = yield* StateStore
+        yield* store.initStateFromImport(importPath, "dev")
+        const loaded = yield* store.loadState("dev")
+        expect(loaded.stackName).toBe("demo-worker")
+        expect(loaded.stage).toBe("dev")
+        expect(loaded.importHash).toBe("abc123")
+        expect(loaded.resources).toHaveLength(3)
+      })
+    )
 
     const raw = await readFile(join(projectDir, ".monolith/state/dev.json"), "utf8")
     expect(raw).toContain('"stackName": "demo-worker"')
@@ -65,20 +72,20 @@ describe("state engine", () => {
       updatedAt: "2026-01-02T00:00:00.000Z"
     }
 
-    const devSave = await saveState("dev", devState, projectDir)
-    const prodSave = await saveState("prod", prodState, projectDir)
-    expect(devSave.ok).toBe(true)
-    expect(prodSave.ok).toBe(true)
+    await runWithStore(
+      projectDir,
+      Effect.gen(function* () {
+        const store = yield* StateStore
+        yield* store.saveState("dev", devState)
+        yield* store.saveState("prod", prodState)
 
-    const devLoad = await loadState("dev", projectDir)
-    const prodLoad = await loadState("prod", projectDir)
-    expect(devLoad.ok).toBe(true)
-    expect(prodLoad.ok).toBe(true)
-    if (devLoad.ok && prodLoad.ok) {
-      expect(devLoad.value.stage).toBe("dev")
-      expect(prodLoad.value.stage).toBe("prod")
-      expect(devLoad.value.updatedAt).not.toBe(prodLoad.value.updatedAt)
-    }
+        const devLoad = yield* store.loadState("dev")
+        const prodLoad = yield* store.loadState("prod")
+        expect(devLoad.stage).toBe("dev")
+        expect(prodLoad.stage).toBe("prod")
+        expect(devLoad.updatedAt).not.toBe(prodLoad.updatedAt)
+      })
+    )
   })
 
   it("clearState removes the stage file", async () => {
@@ -89,13 +96,20 @@ describe("state engine", () => {
       resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
       updatedAt: "2026-01-01T00:00:00.000Z"
     }
-    const saveResult = await saveState("dev", state, projectDir)
-    expect(saveResult.ok).toBe(true)
 
-    const clearResult = await clearState("dev", projectDir)
-    expect(clearResult.ok).toBe(true)
-
-    const loadResult = await loadState("dev", projectDir)
-    expect(loadResult.ok).toBe(false)
+    await expect(
+      runWithStore(
+        projectDir,
+        Effect.gen(function* () {
+          const store = yield* StateStore
+          yield* store.saveState("dev", state)
+          yield* store.clearState("dev")
+          return yield* store.loadState("dev")
+        })
+      )
+    ).rejects.toMatchObject({
+      _tag: "StateError",
+      message: expect.stringContaining("State file not found")
+    })
   })
 })

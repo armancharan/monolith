@@ -1,8 +1,8 @@
 # Monolith — agent onboarding
 
-Independent project home for **Monolith** (M1 codename) / **Perch** (portfolio id): TypeScript IaC for Cloudflare Workers.
+Independent project home for **Monolith** (M1 codename) / **Perch** (portfolio id): **Effect-native** TypeScript IaC for Cloudflare Workers.
 
-**Status:** v0.2.0 — Phase A–C complete (import/plan/deploy, cloud drift, dev/test, preview CI, optional R2 state).
+**Status:** v0.3.0 — Effect-native core; Phase A–C complete (import/plan/deploy, cloud drift, dev/test, preview CI, optional R2 state).
 
 ## Read first
 
@@ -11,19 +11,42 @@ Independent project home for **Monolith** (M1 codename) / **Perch** (portfolio i
 3. [docs/commands.md](./docs/commands.md) — CLI reference
 4. [docs/product-spec.md](./docs/product-spec.md) — full spec, DAGs, roadmap
 
+## Effect idioms
+
+Monolith follows Magpie conventions:
+
+1. **Services use `Context.Service`, not `Effect.Service`.**
+2. **Typed errors via `Data.TaggedError`** — no throw, no dual `Result` + `Effect`.
+3. **Layers:** `Layer.effect` for live implementations; `MonolithLive` composes core + Cloudflare.
+4. **CLI boundary ONLY:** `Effect.runPromise(program.pipe(Effect.provide(makeMonolithLive())))` in `main.ts`.
+
 ## Packages
 
 pnpm workspace monorepo. Build: `pnpm build` (`tsc -b` per package). Typecheck includes `monolith.run.ts` via `tsconfig.run.json`.
 
 | Path | Package | Notes |
 | --- | --- | --- |
-| `packages/core` | `@monolith/core` | Stack types, plan diff, state I/O, preview helpers, remote state interface |
-| `packages/cloudflare` | `@monolith/cloudflare` | Wrangler import/parse, temp config, CF API client, R2 state backend |
-| `packages/cli` | `@monolith/cli` | `monolith` bin — all lifecycle commands |
+| `packages/core` | `@monolith/core` | `StateStore`, `PlanEngine`, `ReconcileProgram` Effect services |
+| `packages/cloudflare` | `@monolith/cloudflare` | `stack()` returns Effect program; `CloudflareClient`, `WranglerDeployer` Layers |
+| `packages/cli` | `@monolith/cli` | argv → Effect programs → `runPromise` |
 | `packages/create-monolith` | `create-monolith` | Scaffold Hono + D1 + KV template |
 | `packages/hono` | `@monolith/hono` | Optional Hono preset — `createHonoWorker(app)` |
-| `packages/effect` | `@monolith/effect` | Optional Effect Layer adapter (CLI stays async-first) |
+| `packages/effect` | `@monolith/effect` | `MonolithLive`, service/tag re-exports |
 | `monolith.run.ts` | — | Example desired-state stack at repo root |
+
+## Stack authoring
+
+```typescript
+import { Effect } from "effect"
+import { stack } from "@monolith/cloudflare"
+
+export default stack("my-app", (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.worker("api")
+    yield* ctx.d1("DB", { databaseId: "..." })
+  })
+)
+```
 
 ## CLI commands
 
@@ -65,8 +88,9 @@ See [docs/testing.md](./docs/testing.md).
 
 - 2-space indent, double quotes, no semicolons (match Magpie repo style when adding TS).
 - Tests colocate: `Foo.ts` + `Foo.test.ts`.
-- Typed errors (`Data.TaggedError`), not thrown exceptions, when using Effect.
+- Typed errors (`Data.TaggedError`), not thrown exceptions.
 - Node 24+ (`.nvmrc`).
+- Effect version: `4.0.0-beta.54` (aligned with Magpie).
 
 ## Portfolio context
 

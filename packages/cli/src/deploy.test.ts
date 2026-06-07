@@ -7,6 +7,7 @@ import {
   runDeploy,
   type RunWranglerDeploy
 } from "./deploy.js"
+import { runCli } from "./runtime.js"
 
 describe("parseWorkerUrlFromWranglerOutput", () => {
   it("extracts the last workers.dev URL from wrangler output", () => {
@@ -63,10 +64,13 @@ describe("runDeploy", () => {
       }
     }
 
-    const code = await runDeploy(["--stage", "dev", "--auto-approve"], {
+    const code = await runCli(
       projectDir,
-      runWrangler: mockDeploy
-    })
+      runDeploy(["--stage", "dev", "--auto-approve"], {
+        projectDir,
+        runWrangler: mockDeploy
+      })
+    )
 
     expect(code).toBe(0)
 
@@ -90,10 +94,13 @@ describe("runDeploy", () => {
       output: "Authentication error\n"
     })
 
-    const code = await runDeploy(["--stage", "dev", "--auto-approve"], {
+    const code = await runCli(
       projectDir,
-      runWrangler: mockDeploy
-    })
+      runDeploy(["--stage", "dev", "--auto-approve"], {
+        projectDir,
+        runWrangler: mockDeploy
+      })
+    )
 
     expect(code).toBe(1)
 
@@ -129,10 +136,13 @@ describe("runDeploy", () => {
       output: "should not run\n"
     })
 
-    const code = await runDeploy(["--stage", "dev"], {
+    const code = await runCli(
       projectDir,
-      runWrangler: mockDeploy
-    })
+      runDeploy(["--stage", "dev"], {
+        projectDir,
+        runWrangler: mockDeploy
+      })
+    )
 
     expect(code).toBe(1)
   })
@@ -151,10 +161,13 @@ describe("runDeploy", () => {
       output: "Deployed https://demo-worker.example.workers.dev\n"
     })
 
-    const code = await runDeploy(["--stage", "dev"], {
+    const code = await runCli(
       projectDir,
-      runWrangler: mockDeploy
-    })
+      runDeploy(["--stage", "dev"], {
+        projectDir,
+        runWrangler: mockDeploy
+      })
+    )
 
     expect(code).toBe(0)
   })
@@ -186,10 +199,13 @@ describe("runDeploy", () => {
       output: "Deployed https://demo-worker.example.workers.dev\n"
     }))
 
-    const code = await runDeploy(["--stage", "dev", "--auto-approve"], {
+    const code = await runCli(
       projectDir,
-      runWrangler: mockDeploy
-    })
+      runDeploy(["--stage", "dev", "--auto-approve"], {
+        projectDir,
+        runWrangler: mockDeploy
+      })
+    )
 
     expect(code).toBe(0)
     expect(mockDeploy).toHaveBeenCalledTimes(2)
@@ -213,10 +229,13 @@ describe("runDeploy", () => {
       }
     }
 
-    const code = await runDeploy(["--stage", "pr-123", "--auto-approve"], {
+    const code = await runCli(
       projectDir,
-      runWrangler: mockDeploy
-    })
+      runDeploy(["--stage", "pr-123", "--auto-approve"], {
+        projectDir,
+        runWrangler: mockDeploy
+      })
+    )
 
     expect(code).toBe(0)
 

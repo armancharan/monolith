@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { describe, expect, it, vi } from "vitest"
 import { resolveDevConfigPath, runDev } from "./dev.js"
+import { runCli } from "./runtime.js"
 
 async function createProjectWithState(): Promise<string> {
   const projectDir = join(tmpdir(), `monolith-dev-${Date.now()}-${Math.random()}`)
@@ -34,7 +35,7 @@ async function createProjectWithState(): Promise<string> {
 describe("resolveDevConfigPath", () => {
   it("uses existing wrangler config from state", async () => {
     const projectDir = await createProjectWithState()
-    const result = await resolveDevConfigPath("dev", projectDir)
+    const result = await runCli(projectDir, resolveDevConfigPath("dev", projectDir))
 
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -68,7 +69,7 @@ describe("resolveDevConfigPath", () => {
     const { unlink } = await import("node:fs/promises")
     await unlink(join(projectDir, "wrangler.jsonc"))
 
-    const result = await resolveDevConfigPath("dev", projectDir)
+    const result = await runCli(projectDir, resolveDevConfigPath("dev", projectDir))
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.temp).toBe(true)
@@ -82,10 +83,13 @@ describe("runDev", () => {
     const projectDir = await createProjectWithState()
     const runWrangler = vi.fn(async () => ({ exitCode: 0 }))
 
-    const code = await runDev(["--stage", "dev", "--watch"], {
+    const code = await runCli(
       projectDir,
-      runWrangler
-    })
+      runDev(["--stage", "dev", "--watch"], {
+        projectDir,
+        runWrangler
+      })
+    )
 
     expect(code).toBe(0)
     expect(runWrangler).toHaveBeenCalledWith(projectDir, "wrangler.jsonc", ["--watch"])

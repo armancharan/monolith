@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { Effect } from "effect"
 import { parse as parseToml } from "smol-toml"
-import { err, ok, type Result } from "./result.js"
+import { CloudflareAuthError } from "./errors.js"
 
 export type AuthSource =
   | "env:api_token"
@@ -13,15 +14,6 @@ export interface ResolvedAuth {
   token: string
   source: AuthSource
   configPath?: string
-}
-
-export class CloudflareAuthError extends Error {
-  readonly _tag = "CloudflareAuthError"
-
-  constructor(message: string) {
-    super(message)
-    this.name = "CloudflareAuthError"
-  }
 }
 
 interface WranglerAuthToml {
@@ -54,70 +46,86 @@ function wranglerConfigCandidates(projectDir?: string): string[] {
   return paths
 }
 
-async function readWranglerToken(
+function readWranglerToken(
   configPath: string
-): Promise<Result<string, CloudflareAuthError>> {
-  let text: string
-  try {
-    text = await readFile(configPath, "utf8")
-  } catch {
-    return err(new CloudflareAuthError(`Could not read wrangler auth config: ${configPath}`))
-  }
+): Effect.Effect<string, CloudflareAuthError> {
+  return Effect.gen(function* () {
+    const text = yield* Effect.tryPromise({
+      try: () => readFile(configPath, "utf8"),
+      catch: () =>
+        new CloudflareAuthError({
+          message: `Could not read wrangler auth config: ${configPath}`
+        })
+    })
 
-  let parsed: WranglerAuthToml
-  try {
-    parsed = parseToml(text) as WranglerAuthToml
-  } catch {
-    return err(new CloudflareAuthError(`Invalid wrangler auth TOML: ${configPath}`))
-  }
-
-  const token = parsed.oauth_token?.trim()
-  if (!token) {
-    return err(new CloudflareAuthError(`No oauth_token in ${configPath}`))
-  }
-
-  if (parsed.expiration_time) {
-    const expiresAt = Date.parse(parsed.expiration_time)
-    if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
-      return err(
-        new CloudflareAuthError(
-          `Wrangler OAuth token expired (${parsed.expiration_time}). Run \`wrangler login\`.`
-        )
+    let parsed: WranglerAuthToml
+    try {
+      parsed = parseToml(text) as WranglerAuthToml
+    } catch {
+      return yield* Effect.fail(
+        new CloudflareAuthError({
+          message: `Invalid wrangler auth TOML: ${configPath}`
+        })
       )
     }
-  }
 
-  return ok(token)
+    const token = parsed.oauth_token?.trim()
+    if (!token) {
+      return yield* Effect.fail(
+        new CloudflareAuthError({
+          message: `No oauth_token in ${configPath}`
+        })
+      )
+    }
+
+    if (parsed.expiration_time) {
+      const expiresAt = Date.parse(parsed.expiration_time)
+      if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
+        return yield* Effect.fail(
+          new CloudflareAuthError({
+            message: `Wrangler OAuth token expired (${parsed.expiration_time}). Run \`wrangler login\`.`
+          })
+        )
+      }
+    }
+
+    return token
+  })
 }
 
-export async function resolveCloudflareAuth(options?: {
+export function resolveCloudflareAuth(options?: {
   projectDir?: string
   /** Override config search paths (tests only). Empty array forces missing-credentials error. */
   configPaths?: string[]
-}): Promise<Result<ResolvedAuth, CloudflareAuthError>> {
-  const envToken = process.env.CLOUDFLARE_API_TOKEN?.trim()
-  if (envToken) {
-    return ok({ token: envToken, source: "env:api_token" })
-  }
-
-  const candidates = options?.configPaths ?? wranglerConfigCandidates(options?.projectDir)
-  for (const configPath of candidates) {
-    const tokenResult = await readWranglerToken(configPath)
-    if (tokenResult.ok) {
-      const source: AuthSource = configPath.includes(`${join(".wrangler", "config")}`)
-        ? "project:wrangler"
-        : "global:wrangler"
-      return ok({
-        token: tokenResult.value,
-        source,
-        configPath
-      })
+}): Effect.Effect<ResolvedAuth, CloudflareAuthError> {
+  return Effect.gen(function* () {
+    const envToken = process.env.CLOUDFLARE_API_TOKEN?.trim()
+    if (envToken) {
+      return { token: envToken, source: "env:api_token" as const }
     }
-  }
 
-  return err(
-    new CloudflareAuthError(
-      "No Cloudflare credentials found. Set CLOUDFLARE_API_TOKEN or run `wrangler login`."
+    const candidates = options?.configPaths ?? wranglerConfigCandidates(options?.projectDir)
+    for (const configPath of candidates) {
+      const token = yield* Effect.catch(readWranglerToken(configPath), () =>
+        Effect.succeed(undefined as string | undefined)
+      )
+      if (token) {
+        const source: AuthSource = configPath.includes(`${join(".wrangler", "config")}`)
+          ? "project:wrangler"
+          : "global:wrangler"
+        return {
+          token,
+          source,
+          configPath
+        }
+      }
+    }
+
+    return yield* Effect.fail(
+      new CloudflareAuthError({
+        message:
+          "No Cloudflare credentials found. Set CLOUDFLARE_API_TOKEN or run `wrangler login`."
+      })
     )
-  )
+  })
 }

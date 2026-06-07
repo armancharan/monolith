@@ -1,6 +1,5 @@
 import {
-  loadState,
-  saveState,
+  StateStore,
   stateFromImportSnapshot,
   type MonolithState
 } from "@monolith/core"
@@ -9,9 +8,11 @@ import {
   parseWranglerConfigText,
   toImportSnapshot
 } from "@monolith/cloudflare"
+import { WranglerDeployer } from "@monolith/cloudflare"
+import { Effect } from "effect"
 import { readFile, writeFile } from "node:fs/promises"
-import { spawn } from "node:child_process"
 import { join } from "node:path"
+import { tryPromiseOr } from "./effect-helpers.js"
 
 export interface WranglerCommandResult {
   exitCode: number
@@ -60,46 +61,16 @@ export function parseKvNamespaceIdFromOutput(output: string): string | undefined
   return undefined
 }
 
-export async function runWranglerCommand(
+export const runWranglerCommand = (
   args: string[],
   projectDir: string
-): Promise<WranglerCommandResult> {
-  return new Promise((resolve) => {
-    const child = spawn("npx", ["wrangler", ...args], {
-      cwd: projectDir,
-      env: process.env,
-      stdio: ["inherit", "pipe", "pipe"]
-    })
-
-    let output = ""
-
-    child.stdout?.on("data", (chunk: Buffer | string) => {
-      const text = chunk.toString()
-      output += text
-      process.stdout.write(text)
-    })
-
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      const text = chunk.toString()
-      output += text
-      process.stderr.write(text)
-    })
-
-    child.on("close", (code) => {
-      resolve({
-        exitCode: code ?? 1,
-        output
-      })
-    })
-
-    child.on("error", (error) => {
-      resolve({
-        exitCode: 1,
-        output: `${output}${error.message}\n`
-      })
-    })
+): Effect.Effect<WranglerCommandResult, never, WranglerDeployer> =>
+  Effect.gen(function* () {
+    const deployer = yield* WranglerDeployer
+    return yield* deployer.runCommand(["wrangler", ...args], { cwd: projectDir }).pipe(
+      Effect.catch((message) => Effect.succeed({ exitCode: 1, output: message }))
+    )
   })
-}
 
 interface PendingD1 {
   binding: string
@@ -201,91 +172,112 @@ export interface EnsureResourcesOptions {
   runWrangler?: RunWranglerCommand
 }
 
-export async function ensurePlaceholderResources(
+export const ensurePlaceholderResources = (
   options: EnsureResourcesOptions
-): Promise<{ ok: true; state: MonolithState } | { ok: false; message: string }> {
-  const { stage, projectDir, configPath } = options
-  const runWrangler = options.runWrangler ?? runWranglerCommand
-  const ensureResourcesFlag = options.ensureResources ?? false
+): Effect.Effect<{ state: MonolithState }, string, StateStore | WranglerDeployer> =>
+  Effect.gen(function* () {
+    const { stage, projectDir, configPath } = options
+    const ensureResourcesFlag = options.ensureResources ?? false
+    const stateStore = yield* StateStore
+    const deployer = yield* WranglerDeployer
 
-  const stateResult = await loadState(stage, projectDir)
-  if (!stateResult.ok) {
-    return { ok: false, message: stateResult.error.message }
-  }
+    const stateResult = yield* stateStore.loadState(stage).pipe(
+      Effect.catch((error) => Effect.fail(error.message))
+    )
 
-  const configText = await readFile(join(projectDir, configPath), "utf8")
-  const pending = findPendingResources(configText, configPath)
+    const configText = yield* Effect.catch(
+      Effect.tryPromise({
+        try: () => readFile(join(projectDir, configPath), "utf8"),
+        catch: (cause) => new Error(cause instanceof Error ? cause.message : String(cause))
+      }),
+      (cause) => Effect.fail(cause instanceof Error ? cause.message : String(cause))
+    )
 
-  if (pending.d1.length === 0 && pending.kv.length === 0) {
-    return { ok: true, state: stateResult.value }
-  }
+    const pending = findPendingResources(configText, configPath)
 
-  const autoEnsure = needsAutoEnsure(configText, configPath)
-  if (!autoEnsure && !ensureResourcesFlag) {
-    return { ok: true, state: stateResult.value }
-  }
-
-  console.log("Ensuring Cloudflare resources for placeholder bindings...")
-
-  const d1Updates: Array<{ binding: string; databaseId: string }> = []
-  const kvUpdates: Array<{ binding: string; namespaceId: string }> = []
-
-  for (const entry of pending.d1) {
-    console.log(`  Creating D1 database "${entry.databaseName}" (binding ${entry.binding})...`)
-    const result = await runWrangler(["d1", "create", entry.databaseName], projectDir)
-    if (result.exitCode !== 0) {
-      return {
-        ok: false,
-        message: `wrangler d1 create failed for "${entry.databaseName}" (exit ${result.exitCode})`
-      }
+    if (pending.d1.length === 0 && pending.kv.length === 0) {
+      return { state: stateResult }
     }
 
-    const databaseId = parseD1DatabaseIdFromOutput(result.output)
-    if (!databaseId) {
-      return {
-        ok: false,
-        message: `Could not parse database_id from wrangler d1 create output for "${entry.databaseName}"`
-      }
+    const autoEnsure = needsAutoEnsure(configText, configPath)
+    if (!autoEnsure && !ensureResourcesFlag) {
+      return { state: stateResult }
     }
 
-    d1Updates.push({ binding: entry.binding, databaseId })
-    console.log(`    database_id: ${databaseId}`)
-  }
+    console.log("Ensuring Cloudflare resources for placeholder bindings...")
 
-  for (const entry of pending.kv) {
-    const title = `${stateResult.value.stackName}-${entry.binding}`.toLowerCase()
-    console.log(`  Creating KV namespace "${title}" (binding ${entry.binding})...`)
-    const result = await runWrangler(["kv", "namespace", "create", title], projectDir)
-    if (result.exitCode !== 0) {
-      return {
-        ok: false,
-        message: `wrangler kv namespace create failed for "${title}" (exit ${result.exitCode})`
+    const d1Updates: Array<{ binding: string; databaseId: string }> = []
+    const kvUpdates: Array<{ binding: string; namespaceId: string }> = []
+
+    const runWrangler = options.runWrangler
+      ? (args: string[]) =>
+          tryPromiseOr(() => options.runWrangler!(args, projectDir), { exitCode: 1, output: "" })
+      : (args: string[]) =>
+          deployer.runCommand(["wrangler", ...args], { cwd: projectDir }).pipe(
+            Effect.catch((message) => Effect.succeed({ exitCode: 1, output: message }))
+          )
+
+    for (const entry of pending.d1) {
+      console.log(`  Creating D1 database "${entry.databaseName}" (binding ${entry.binding})...`)
+      const result = yield* runWrangler(["d1", "create", entry.databaseName])
+      if (result.exitCode !== 0) {
+        return yield* Effect.fail(
+          `wrangler d1 create failed for "${entry.databaseName}" (exit ${result.exitCode})`
+        )
       }
+
+      const databaseId = parseD1DatabaseIdFromOutput(result.output)
+      if (!databaseId) {
+        return yield* Effect.fail(
+          `Could not parse database_id from wrangler d1 create output for "${entry.databaseName}"`
+        )
+      }
+
+      d1Updates.push({ binding: entry.binding, databaseId })
+      console.log(`    database_id: ${databaseId}`)
     }
 
-    const namespaceId = parseKvNamespaceIdFromOutput(result.output)
-    if (!namespaceId) {
-      return {
-        ok: false,
-        message: `Could not parse namespace id from wrangler kv namespace create output for "${title}"`
+    for (const entry of pending.kv) {
+      const title = `${stateResult.stackName}-${entry.binding}`.toLowerCase()
+      console.log(`  Creating KV namespace "${title}" (binding ${entry.binding})...`)
+      const result = yield* runWrangler(["kv", "namespace", "create", title])
+      if (result.exitCode !== 0) {
+        return yield* Effect.fail(
+          `wrangler kv namespace create failed for "${title}" (exit ${result.exitCode})`
+        )
       }
+
+      const namespaceId = parseKvNamespaceIdFromOutput(result.output)
+      if (!namespaceId) {
+        return yield* Effect.fail(
+          `Could not parse namespace id from wrangler kv namespace create output for "${title}"`
+        )
+      }
+
+      kvUpdates.push({ binding: entry.binding, namespaceId })
+      console.log(`    id: ${namespaceId}`)
     }
 
-    kvUpdates.push({ binding: entry.binding, namespaceId })
-    console.log(`    id: ${namespaceId}`)
-  }
+    yield* Effect.catch(
+      Effect.tryPromise({
+        try: () => updateWranglerConfigIds(configPath, projectDir, { d1: d1Updates, kv: kvUpdates }),
+        catch: (cause) => new Error(cause instanceof Error ? cause.message : String(cause))
+      }),
+      (cause) => Effect.fail(cause instanceof Error ? cause.message : String(cause))
+    )
 
-  await updateWranglerConfigIds(configPath, projectDir, {
-    d1: d1Updates,
-    kv: kvUpdates
+    const nextState = yield* Effect.catch(
+      Effect.tryPromise({
+        try: () => refreshStateFromWrangler(stage, projectDir, configPath, stateResult),
+        catch: (cause) => new Error(cause instanceof Error ? cause.message : String(cause))
+      }),
+      (cause) => Effect.fail(cause instanceof Error ? cause.message : String(cause))
+    )
+
+    yield* stateStore.saveState(stage, nextState).pipe(
+      Effect.catch((error) => Effect.fail(error.message))
+    )
+
+    console.log(`  Updated ${configPath} and .monolith/state/${stage}.json`)
+    return { state: nextState }
   })
-
-  const nextState = await refreshStateFromWrangler(stage, projectDir, configPath, stateResult.value)
-  const saveResult = await saveState(stage, nextState, projectDir)
-  if (!saveResult.ok) {
-    return { ok: false, message: saveResult.error.message }
-  }
-
-  console.log(`  Updated ${configPath} and .monolith/state/${stage}.json`)
-  return { ok: true, state: nextState }
-}

@@ -1,5 +1,6 @@
+import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
-import { CloudflareClient } from "./client.js"
+import { makeCloudflareClient } from "./services/CloudflareClient.js"
 import { bindingsToStateResources, readActualWorker } from "./read.js"
 
 describe("bindingsToStateResources", () => {
@@ -80,20 +81,17 @@ describe("readActualWorker", () => {
       })
     })
 
-    const client = new CloudflareClient({
+    const client = makeCloudflareClient({
       token: "test-token",
       fetchImpl: fetchImpl as typeof fetch
     })
 
-    const result = await readActualWorker(client, "acct-1", "demo-worker")
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.value).toHaveLength(3)
-      expect(result.value[0]?.id).toBe("worker:demo-worker")
-      expect(result.value.find((resource) => resource.id === "d1:DB")?.databaseId).toBe(
-        "11111111-1111-1111-1111-111111111111"
-      )
-    }
+    const result = await Effect.runPromise(readActualWorker(client, "acct-1", "demo-worker"))
+    expect(result).toHaveLength(3)
+    expect(result[0]?.id).toBe("worker:demo-worker")
+    expect(result.find((resource) => resource.id === "d1:DB")?.databaseId).toBe(
+      "11111111-1111-1111-1111-111111111111"
+    )
   })
 
   it("returns API error when worker settings are unavailable", async () => {
@@ -103,12 +101,13 @@ describe("readActualWorker", () => {
       })
     )
 
-    const client = new CloudflareClient({
+    const client = makeCloudflareClient({
       token: "test-token",
       fetchImpl: fetchImpl as typeof fetch
     })
 
-    const result = await readActualWorker(client, "acct-1", "missing-worker")
-    expect(result.ok).toBe(false)
+    await expect(
+      Effect.runPromise(readActualWorker(client, "acct-1", "missing-worker"))
+    ).rejects.toBeDefined()
   })
 })

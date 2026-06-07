@@ -1,10 +1,10 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { CloudflareAuthError, CloudflareClient } from "@monolith/cloudflare"
 import { evaluateRouteAssertions, normalizeAssertionRoutes } from "../../src/assertions.js"
 import type { RunWranglerDeploy } from "../../src/deploy.js"
 import { runImport } from "../../src/import.js"
+import { runCli } from "../../src/runtime.js"
 import { runTest } from "../../src/test.js"
 import { createFixtureProject, readState } from "./helpers.js"
 
@@ -17,15 +17,13 @@ describe("assertions integration", () => {
   })
 
   it("evaluates route assertions end-to-end in test harness", async () => {
-    vi.spyOn(CloudflareClient, "create").mockResolvedValue({
-      ok: false,
-      error: new CloudflareAuthError("missing token")
-    })
-
     const projectDir = await createFixtureProject()
     tempDirs.push(projectDir)
 
-    const importCode = await runImport([join(projectDir, "wrangler.jsonc"), "--stage", "dev"])
+    const importCode = await runCli(
+      projectDir,
+      runImport([join(projectDir, "wrangler.jsonc"), "--stage", "dev"])
+    )
     expect(importCode).toBe(0)
 
     await mkdir(join(projectDir, ".monolith", "test"), { recursive: true })
@@ -68,11 +66,14 @@ describe("assertions integration", () => {
       output: "Deployed https://monolith-m1-dogfood.example.workers.dev\n"
     })
 
-    const testCode = await runTest(["--stage", "dev"], {
+    const testCode = await runCli(
       projectDir,
-      runWranglerDeploy: mockDeploy,
-      httpFetch: mockFetch
-    })
+      runTest(["--stage", "dev"], {
+        projectDir,
+        runWranglerDeploy: mockDeploy,
+        httpFetch: mockFetch
+      })
+    )
 
     expect(testCode).toBe(0)
 

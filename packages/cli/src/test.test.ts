@@ -6,6 +6,7 @@ import { resolveTestUrl, runHttpSmokeCheck, runTest } from "./test.js"
 import type { RunWranglerDeploy } from "./deploy.js"
 import type { RunWranglerDelete } from "./destroy.js"
 import type { HttpFetch } from "./test.js"
+import { runCli } from "./runtime.js"
 
 describe("resolveTestUrl", () => {
   it("prefers MONOLITH_TEST_URL over state workerUrl", () => {
@@ -97,12 +98,15 @@ describe("runTest", () => {
       return { status: 200, body: "ok" }
     }
 
-    const code = await runTest(["--stage", "dev", "--destroy-after"], {
+    const code = await runCli(
       projectDir,
-      runWranglerDeploy: mockDeploy,
-      runWranglerDelete: mockDelete,
-      httpFetch: mockFetch
-    })
+      runTest(["--stage", "dev", "--destroy-after"], {
+        projectDir,
+        runWranglerDeploy: mockDeploy,
+        runWranglerDelete: mockDelete,
+        httpFetch: mockFetch
+      })
+    )
 
     expect(code).toBe(0)
     expect(deployCalls).toEqual(["deploy"])
@@ -131,11 +135,14 @@ describe("runTest", () => {
 
     const mockFetch: HttpFetch = async () => ({ status: 503, body: "down" })
 
-    const code = await runTest(["--stage", "dev"], {
+    const code = await runCli(
       projectDir,
-      runWranglerDeploy: mockDeploy,
-      httpFetch: mockFetch
-    })
+      runTest(["--stage", "dev"], {
+        projectDir,
+        runWranglerDeploy: mockDeploy,
+        httpFetch: mockFetch
+      })
+    )
 
     expect(code).toBe(1)
   })

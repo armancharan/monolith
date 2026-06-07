@@ -1,14 +1,12 @@
 import {
-  err,
-  ok,
   stateObjectKey,
   StateError,
   type MonolithState,
-  type RemoteStateBackend,
-  type Result
+  type RemoteStateBackend
 } from "@monolith/core"
-import { CloudflareClient } from "./client.js"
+import { Effect } from "effect"
 import { resolveCloudflareAuth } from "./auth.js"
+import { makeCloudflareClient } from "./services/CloudflareClient.js"
 
 export interface R2StateBackendOptions {
   bucket: string
@@ -22,30 +20,33 @@ function r2S3Endpoint(accountId: string): string {
   return `https://${accountId}.r2.cloudflarestorage.com`
 }
 
-async function resolveAccountId(
+function resolveAccountId(
   options: R2StateBackendOptions,
   projectDir?: string
-): Promise<Result<string, StateError>> {
+): Effect.Effect<string, StateError> {
   if (options.accountId) {
-    return ok(options.accountId)
+    return Effect.succeed(options.accountId)
   }
 
-  const authResult = await resolveCloudflareAuth({ projectDir })
-  if (!authResult.ok) {
-    return err(new StateError(`R2 state backend: ${authResult.error.message}`))
-  }
+  return Effect.gen(function* () {
+    const auth = yield* Effect.catch(
+      resolveCloudflareAuth({ projectDir }),
+      (error) =>
+        Effect.fail(new StateError({ message: `R2 state backend: ${error.message}` }))
+    )
 
-  const clientResult = await CloudflareClient.create({ projectDir, fetchImpl: options.fetchImpl })
-  if (!clientResult.ok) {
-    return err(new StateError(`R2 state backend: ${clientResult.error.message}`))
-  }
+    const client = makeCloudflareClient({
+      token: auth.token,
+      auth,
+      fetchImpl: options.fetchImpl
+    })
 
-  const accountResult = await clientResult.value.getAccountId()
-  if (!accountResult.ok) {
-    return err(new StateError(`R2 state backend: ${accountResult.error.message}`))
-  }
-
-  return ok(accountResult.value)
+    return yield* Effect.catch(
+      client.getAccountId(),
+      (error) =>
+        Effect.fail(new StateError({ message: `R2 state backend: ${error.message}` }))
+    )
+  })
 }
 
 function resolveR2Credentials(
@@ -163,22 +164,27 @@ export class R2StateBackend implements RemoteStateBackend {
   static fromEnv(
     env: NodeJS.ProcessEnv = process.env,
     options?: { projectDir?: string; fetchImpl?: typeof fetch }
-  ): Result<R2StateBackend, StateError> {
+  ): Effect.Effect<R2StateBackend, StateError> {
     const bucket = env.MONOLITH_STATE_R2_BUCKET?.trim()
     if (!bucket) {
-      return err(new StateError("MONOLITH_STATE_R2_BUCKET is required when MONOLITH_STATE_BACKEND=r2"))
+      return Effect.fail(
+        new StateError({
+          message: "MONOLITH_STATE_R2_BUCKET is required when MONOLITH_STATE_BACKEND=r2"
+        })
+      )
     }
 
     const creds = resolveR2Credentials(env)
     if (!creds) {
-      return err(
-        new StateError(
-          "R2 credentials required: set MONOLITH_STATE_R2_ACCESS_KEY_ID and MONOLITH_STATE_R2_SECRET_ACCESS_KEY"
-        )
+      return Effect.fail(
+        new StateError({
+          message:
+            "R2 credentials required: set MONOLITH_STATE_R2_ACCESS_KEY_ID and MONOLITH_STATE_R2_SECRET_ACCESS_KEY"
+        })
       )
     }
 
-    return ok(
+    return Effect.succeed(
       new R2StateBackend({
         bucket,
         accountId: env.MONOLITH_STATE_R2_ACCOUNT_ID?.trim() ?? env.CLOUDFLARE_ACCOUNT_ID?.trim(),
@@ -190,97 +196,128 @@ export class R2StateBackend implements RemoteStateBackend {
     )
   }
 
-  async #objectUrl(key: string): Promise<Result<URL, StateError>> {
-    const accountResult = await resolveAccountId(
-      { bucket: this.#bucket, accountId: this.#accountId, fetchImpl: this.#fetch },
-      this.#projectDir
-    )
-    if (!accountResult.ok) {
-      return accountResult
-    }
+  #objectUrl(key: string): Effect.Effect<URL, StateError> {
+    const bucket = this.#bucket
+    const accountId = this.#accountId
+    const fetchImpl = this.#fetch
+    const projectDir = this.#projectDir
 
-    const endpoint = r2S3Endpoint(accountResult.value)
-    return ok(new URL(`/${this.#bucket}/${key}`, endpoint))
-  }
-
-  async pull(stage: string): Promise<Result<MonolithState, StateError>> {
-    const key = stateObjectKey(stage)
-    const urlResult = await this.#objectUrl(key)
-    if (!urlResult.ok) {
-      return urlResult
-    }
-
-    if (!this.#accessKeyId || !this.#secretAccessKey) {
-      return err(new StateError("R2 credentials not configured"))
-    }
-
-    const headers = await signS3Request("GET", urlResult.value, {
-      accessKeyId: this.#accessKeyId,
-      secretAccessKey: this.#secretAccessKey
+    return Effect.gen(function* () {
+      const resolvedAccountId = yield* resolveAccountId(
+        { bucket, accountId, fetchImpl },
+        projectDir
+      )
+      const endpoint = r2S3Endpoint(resolvedAccountId)
+      return new URL(`/${bucket}/${key}`, endpoint)
     })
-
-    let response: Response
-    try {
-      response = await this.#fetch(urlResult.value.toString(), { method: "GET", headers })
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause)
-      return err(new StateError(`R2 pull failed: ${message}`))
-    }
-
-    if (response.status === 404) {
-      return err(new StateError(`Remote state not found: ${key}`))
-    }
-
-    if (!response.ok) {
-      return err(new StateError(`R2 pull failed: HTTP ${response.status}`))
-    }
-
-    try {
-      const parsed = (await response.json()) as MonolithState
-      if (!parsed.stackName || !parsed.stage || !Array.isArray(parsed.resources)) {
-        return err(new StateError(`Invalid remote state JSON for stage "${stage}"`))
-      }
-      return ok(parsed)
-    } catch {
-      return err(new StateError(`Could not parse remote state JSON for stage "${stage}"`))
-    }
   }
 
-  async push(stage: string, state: MonolithState): Promise<Result<void, StateError>> {
-    const key = stateObjectKey(stage)
-    const urlResult = await this.#objectUrl(key)
-    if (!urlResult.ok) {
-      return urlResult
-    }
+  pull(stage: string): Effect.Effect<MonolithState, StateError> {
+    const accessKeyId = this.#accessKeyId
+    const secretAccessKey = this.#secretAccessKey
+    const fetchImpl = this.#fetch
+    const objectUrl = (key: string) => this.#objectUrl(key)
 
-    if (!this.#accessKeyId || !this.#secretAccessKey) {
-      return err(new StateError("R2 credentials not configured"))
-    }
+    return Effect.gen(function* () {
+      const key = stateObjectKey(stage)
+      const url = yield* objectUrl(key)
 
-    const body = `${JSON.stringify(state, null, 2)}\n`
-    const headers = await signS3Request(
-      "PUT",
-      urlResult.value,
-      { accessKeyId: this.#accessKeyId, secretAccessKey: this.#secretAccessKey },
-      body
-    )
+      if (!accessKeyId || !secretAccessKey) {
+        return yield* Effect.fail(new StateError({ message: "R2 credentials not configured" }))
+      }
 
-    let response: Response
-    try {
-      response = await this.#fetch(urlResult.value.toString(), {
-        method: "PUT",
-        headers,
-        body
+      const headers = yield* Effect.tryPromise({
+        try: () =>
+          signS3Request("GET", url, {
+            accessKeyId,
+            secretAccessKey
+          }),
+        catch: (cause) =>
+          new StateError({
+            message: `R2 pull failed: ${cause instanceof Error ? cause.message : String(cause)}`
+          })
       })
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause)
-      return err(new StateError(`R2 push failed: ${message}`))
-    }
 
-    if (!response.ok) {
-      return err(new StateError(`R2 push failed: HTTP ${response.status}`))
-    }
+      const response = yield* Effect.tryPromise({
+        try: () => fetchImpl(url.toString(), { method: "GET", headers }),
+        catch: (cause) =>
+          new StateError({
+            message: `R2 pull failed: ${cause instanceof Error ? cause.message : String(cause)}`
+          })
+      })
 
-    return ok(undefined)
+      if (response.status === 404) {
+        return yield* Effect.fail(new StateError({ message: `Remote state not found: ${key}` }))
+      }
+
+      if (!response.ok) {
+        return yield* Effect.fail(new StateError({ message: `R2 pull failed: HTTP ${response.status}` }))
+      }
+
+      const parsed = yield* Effect.tryPromise({
+        try: () => response.json() as Promise<MonolithState>,
+        catch: () =>
+          new StateError({ message: `Could not parse remote state JSON for stage "${stage}"` })
+      })
+
+      if (!parsed.stackName || !parsed.stage || !Array.isArray(parsed.resources)) {
+        return yield* Effect.fail(
+          new StateError({ message: `Invalid remote state JSON for stage "${stage}"` })
+        )
+      }
+
+      return parsed
+    })
+  }
+
+  push(stage: string, state: MonolithState): Effect.Effect<void, StateError> {
+    const accessKeyId = this.#accessKeyId
+    const secretAccessKey = this.#secretAccessKey
+    const fetchImpl = this.#fetch
+    const objectUrl = (key: string) => this.#objectUrl(key)
+
+    return Effect.gen(function* () {
+      const key = stateObjectKey(stage)
+      const url = yield* objectUrl(key)
+
+      if (!accessKeyId || !secretAccessKey) {
+        return yield* Effect.fail(new StateError({ message: "R2 credentials not configured" }))
+      }
+
+      const body = `${JSON.stringify(state, null, 2)}\n`
+      const headers = yield* Effect.tryPromise({
+        try: () =>
+          signS3Request(
+            "PUT",
+            url,
+            {
+              accessKeyId,
+              secretAccessKey
+            },
+            body
+          ),
+        catch: (cause) =>
+          new StateError({
+            message: `R2 push failed: ${cause instanceof Error ? cause.message : String(cause)}`
+          })
+      })
+
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          fetchImpl(url.toString(), {
+            method: "PUT",
+            headers,
+            body
+          }),
+        catch: (cause) =>
+          new StateError({
+            message: `R2 push failed: ${cause instanceof Error ? cause.message : String(cause)}`
+          })
+      })
+
+      if (!response.ok) {
+        return yield* Effect.fail(new StateError({ message: `R2 push failed: HTTP ${response.status}` }))
+      }
+    })
   }
 }

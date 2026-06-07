@@ -1,6 +1,11 @@
 /**
  * M1 CLI commands — import, plan, deploy, dev, test, state, typegen wired.
  */
+import { CloudflareClient, WranglerDeployer } from "@monolith/cloudflare"
+import { ReconcileProgram, StateStore } from "@monolith/core"
+import { Effect } from "effect"
+
+export type CommandServices = StateStore | ReconcileProgram | WranglerDeployer | CloudflareClient
 import { runDeploy } from "./deploy.js"
 import { runDev } from "./dev.js"
 import { runDestroy } from "./destroy.js"
@@ -25,46 +30,50 @@ export type CommandName =
   | "state"
   | "typegen"
 
-export async function runCommand(name: CommandName, args: string[]): Promise<number> {
-  switch (name) {
-    case "init":
-      console.log("monolith init — not implemented (C0 scaffold)")
-      return 0
-    case "import":
-      return runImport(args)
-    case "plan":
-      return runPlan(args)
-    case "deploy":
-      return runDeploy(args)
-    case "dev":
-      return runDev(args)
-    case "destroy":
-      return runDestroy(args)
-    case "test":
-      return runTest(args)
-    case "whoami":
-      return runWhoami(args)
-    case "state":
-      if (args[0] === "init") {
-        return runStateInit(args.slice(1))
-      }
-      if (args[0] === "pull") {
-        return runStatePull(args.slice(1))
-      }
-      if (args[0] === "push") {
-        return runStatePush(args.slice(1))
-      }
-      console.error(
-        "Usage: monolith state init|pull|push --stage <name> [--from <import.json>] [--preview]"
-      )
-      return 1
-    case "typegen":
-      return runTypegen(args)
-    case "help":
-      printHelp()
-      return 0
-  }
-}
+export const runCommand = (
+  name: CommandName,
+  args: string[]
+): Effect.Effect<number, never, CommandServices> =>
+  Effect.gen(function* () {
+    switch (name) {
+      case "init":
+        console.log("monolith init — not implemented (C0 scaffold)")
+        return 0
+      case "import":
+        return yield* runImport(args)
+      case "plan":
+        return yield* runPlan(args)
+      case "deploy":
+        return yield* runDeploy(args)
+      case "dev":
+        return yield* runDev(args)
+      case "destroy":
+        return yield* runDestroy(args)
+      case "test":
+        return yield* runTest(args)
+      case "whoami":
+        return yield* runWhoami(args)
+      case "state":
+        if (args[0] === "init") {
+          return yield* runStateInit(args.slice(1))
+        }
+        if (args[0] === "pull") {
+          return yield* runStatePull(args.slice(1))
+        }
+        if (args[0] === "push") {
+          return yield* runStatePush(args.slice(1))
+        }
+        console.error(
+          "Usage: monolith state init|pull|push --stage <name> [--from <import.json>] [--preview]"
+        )
+        return 1
+      case "typegen":
+        return yield* runTypegen(args)
+      case "help":
+        printHelp()
+        return 0
+    }
+  })
 
 export function printHelp(): void {
   console.log(`monolith — TypeScript IaC for Cloudflare Workers (M1)

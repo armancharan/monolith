@@ -2,10 +2,10 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-armancharan%2Fmonolith-181717?logo=github)](https://github.com/armancharan/monolith)
 
-TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony or Effect lock-in. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `monolith.run.ts`, get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production.
+**Effect-native** TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `monolith.run.ts` using Effect (`Context.Service`, `Layer`, `Data.TaggedError`), get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production.
 
 **Portfolio id:** Perch (experiment) · **M1 codename:** Monolith  
-**Status:** Phase A–C complete (v0.2.0) — import/plan/deploy, cloud drift, dev/test harness, preview CI, optional R2 state  
+**Status:** v0.3.0 — Effect-native core (import/plan/deploy, cloud drift, dev/test harness, preview CI, optional R2 state)  
 **Positioning:** B2D / agency devtools — reputation-first validation, not Vercel-adjacent hosting or Canva-style creative tooling.
 
 ## Features (Phase A–C)
@@ -17,7 +17,7 @@ TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml`
 | **Preview** | `pr-*` stages; suffixed Worker names; shared D1/KV/R2 bindings |
 | **DX** | `monolith dev` with binding summary + `--watch`; route assertions in `monolith test` |
 | **Team** | GitHub Action: PR plan + preview deploy + URL comment; optional R2 remote state |
-| **Ecosystem** | `create-monolith`, `@monolith/hono`, `@monolith/effect` (optional) |
+| **Ecosystem** | `create-monolith`, `@monolith/hono`, `@monolith/effect` (`MonolithLive` layer) |
 
 ## Quick start
 
@@ -34,12 +34,12 @@ Requires **Node 24+** (see `.nvmrc`).
 
 | Package | Role |
 | --- | --- |
-| `@monolith/core` | Stack types, plan diff, `.monolith/state/<stage>.json`, remote state interface |
-| `@monolith/cloudflare` | CF `stack()` helper, wrangler import, auth client, R2 state backend |
-| `@monolith/cli` | `monolith` bin — import, plan, deploy, destroy, test, dev, typegen, state pull/push |
+| `@monolith/core` | Effect services: `StateStore`, `PlanEngine`, `ReconcileProgram` |
+| `@monolith/cloudflare` | Effect `stack()`, `CloudflareClient` / `WranglerDeployer` Layers, wrangler import |
+| `@monolith/cli` | `monolith` bin — Effect programs with `MonolithLive` at the CLI boundary |
 | `create-monolith` | Scaffold Hono + D1 + KV Worker template |
 | `@monolith/hono` | Hono preset — `createHonoWorker(app)` |
-| `@monolith/effect` | Effect Layer adapter (optional) |
+| `@monolith/effect` | `MonolithLive` + service/tag re-exports for Effect-native apps |
 
 Example stack: [`monolith.run.ts`](./monolith.run.ts) at repo root.
 

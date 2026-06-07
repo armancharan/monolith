@@ -1,9 +1,14 @@
-import type { MonolithState, StateResource } from "@monolith/core"
 import { spawn } from "node:child_process"
-import { CloudflareClient } from "./client.js"
-import type { CloudflareApiError } from "./client.js"
-import { CloudflareAuthError } from "./auth.js"
-import { err, ok, type Result } from "./result.js"
+import type { MonolithState, StateResource } from "@monolith/core"
+import { Effect } from "effect"
+import { CloudflareAuthError } from "./errors.js"
+import { CloudflareApiError } from "./errors.js"
+import { resolveCloudflareAuth } from "./auth.js"
+import {
+  makeCloudflareClient,
+  type CloudflareClient
+} from "./services/CloudflareClient.js"
+import type { Context } from "effect"
 
 export interface CloudBindingHint {
   name: string
@@ -58,11 +63,13 @@ interface WranglerDeploymentRow {
   source?: string
 }
 
+export type CloudflareClientService = Context.Service.Shape<typeof CloudflareClient>
+
 export type RunWranglerDeploymentsList = (
   projectDir: string,
   workerName: string,
   configPath?: string
-) => Promise<Result<WranglerDeploymentRow[], string>>
+) => Effect.Effect<WranglerDeploymentRow[], string>
 
 const READ_LIMITATIONS = [
   "Cloud read compares binding names/types only — binding target IDs may differ without surfacing here.",
@@ -192,62 +199,67 @@ export function bindingsToStateResources(
   return resources
 }
 
-export async function readActualWorker(
-  client: CloudflareClient,
-  accountId: string,
-  workerName: string
-): Promise<Result<StateResource[], CloudflareApiError>> {
-  const settingsResult = await readWorkerSettingsFromApi(client, accountId, workerName)
-  if (!settingsResult.ok) {
-    return settingsResult
+function resolveClient(
+  options: { projectDir: string; client?: CloudflareClientService }
+): Effect.Effect<CloudflareClientService, CloudflareAuthError> {
+  if (options.client) {
+    return Effect.succeed(options.client)
   }
 
-  return ok(bindingsToStateResources(workerName, settingsResult.value.bindings))
+  return Effect.gen(function* () {
+    const resolvedAuth = yield* resolveCloudflareAuth({ projectDir: options.projectDir })
+    return makeCloudflareClient({
+      token: resolvedAuth.token,
+      auth: resolvedAuth
+    })
+  })
+}
+
+export function readActualWorker(
+  client: CloudflareClientService,
+  accountId: string,
+  workerName: string
+): Effect.Effect<StateResource[], CloudflareApiError> {
+  return Effect.gen(function* () {
+    const settings = yield* readWorkerSettingsFromApi(client, accountId, workerName)
+    return bindingsToStateResources(workerName, settings.bindings)
+  })
 }
 
 export interface ReadActualStackOptions {
   state: MonolithState
   projectDir: string
   accountId?: string
-  client?: CloudflareClient
+  client?: CloudflareClientService
 }
 
-export async function readActualStack(
+export function readActualStack(
   options: ReadActualStackOptions
-): Promise<Result<MonolithState, CloudflareAuthError | CloudflareApiError | string>> {
-  const workerName = workerNameFromState(options.state)
-  if (!workerName) {
-    return err("State has no worker name to read from cloud")
-  }
-
-  let client = options.client
-  if (!client) {
-    const clientResult = await CloudflareClient.create({ projectDir: options.projectDir })
-    if (!clientResult.ok) {
-      return clientResult
+): Effect.Effect<
+  MonolithState,
+  CloudflareAuthError | CloudflareApiError | string
+> {
+  return Effect.gen(function* () {
+    const workerName = workerNameFromState(options.state)
+    if (!workerName) {
+      return yield* Effect.fail("State has no worker name to read from cloud")
     }
-    client = clientResult.value
-  }
 
-  let accountId = options.accountId
-  if (!accountId) {
-    const accountResult = await client.getAccountId()
-    if (!accountResult.ok) {
-      return accountResult
+    const client = yield* resolveClient(options)
+
+    let accountId = options.accountId
+    if (!accountId) {
+      accountId = yield* client.getAccountId()
     }
-    accountId = accountResult.value
-  }
 
-  const resourcesResult = await readActualWorker(client, accountId, workerName)
-  if (!resourcesResult.ok) {
-    return resourcesResult
-  }
+    const resources = yield* readActualWorker(client, accountId!, workerName)
 
-  return ok({
-    stackName: options.state.stackName,
-    stage: options.state.stage,
-    resources: resourcesResult.value,
-    updatedAt: new Date().toISOString()
+    return {
+      stackName: options.state.stackName,
+      stage: options.state.stage,
+      resources,
+      updatedAt: new Date().toISOString()
+    }
   })
 }
 
@@ -270,63 +282,72 @@ function normalizeCloudBindings(bindings: RawCloudBinding[] | undefined): CloudB
   })
 }
 
-export async function readWorkerSettingsFromApi(
-  client: CloudflareClient,
+export function readWorkerSettingsFromApi(
+  client: CloudflareClientService,
   accountId: string,
   workerName: string
-): Promise<Result<WorkerSettingsResponse, CloudflareApiError>> {
+): Effect.Effect<WorkerSettingsResponse, CloudflareApiError> {
   return client.request<WorkerSettingsResponse>(
     `/accounts/${accountId}/workers/scripts/${encodeURIComponent(workerName)}/settings`
   )
 }
 
-export async function runWranglerDeploymentsList(
+export function runWranglerDeploymentsList(
   projectDir: string,
   workerName: string,
   configPath?: string
-): Promise<Result<WranglerDeploymentRow[], string>> {
+): Effect.Effect<WranglerDeploymentRow[], string> {
   const wranglerArgs = ["wrangler", "deployments", "list", "--name", workerName, "--json"]
   if (configPath) {
     wranglerArgs.push("--config", configPath)
   }
 
-  return new Promise((resolve) => {
-    const child = spawn("npx", wranglerArgs, {
-      cwd: projectDir,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"]
+  return Effect.gen(function* () {
+    const outcome = yield* Effect.tryPromise({
+      try: () =>
+        new Promise<{ code: number; output: string; errorOutput: string }>((resolve, reject) => {
+          const child = spawn("npx", wranglerArgs, {
+            cwd: projectDir,
+            env: process.env,
+            stdio: ["ignore", "pipe", "pipe"]
+          })
+
+          let output = ""
+          let errorOutput = ""
+
+          child.stdout?.on("data", (chunk: Buffer | string) => {
+            output += chunk.toString()
+          })
+
+          child.stderr?.on("data", (chunk: Buffer | string) => {
+            errorOutput += chunk.toString()
+          })
+
+          child.on("close", (code) => {
+            resolve({ code: code ?? 1, output, errorOutput })
+          })
+
+          child.on("error", (error) => {
+            reject(error.message)
+          })
+        }),
+      catch: (cause) => String(cause)
     })
 
-    let output = ""
-    let errorOutput = ""
+    if (outcome.code !== 0) {
+      const message =
+        outcome.errorOutput.trim() ||
+        outcome.output.trim() ||
+        `wrangler exited with code ${outcome.code}`
+      return yield* Effect.fail(message)
+    }
 
-    child.stdout?.on("data", (chunk: Buffer | string) => {
-      output += chunk.toString()
-    })
-
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      errorOutput += chunk.toString()
-    })
-
-    child.on("close", (code) => {
-      if (code !== 0) {
-        const message = errorOutput.trim() || output.trim() || `wrangler exited with code ${code ?? 1}`
-        resolve(err(message))
-        return
-      }
-
-      try {
-        const parsed = JSON.parse(output) as WranglerDeploymentRow[] | WranglerDeploymentRow
-        const rows = Array.isArray(parsed) ? parsed : [parsed]
-        resolve(ok(rows))
-      } catch {
-        resolve(err("Could not parse wrangler deployments list JSON output"))
-      }
-    })
-
-    child.on("error", (error) => {
-      resolve(err(error.message))
-    })
+    try {
+      const parsed = JSON.parse(outcome.output) as WranglerDeploymentRow[] | WranglerDeploymentRow
+      return Array.isArray(parsed) ? parsed : [parsed]
+    } catch {
+      return yield* Effect.fail("Could not parse wrangler deployments list JSON output")
+    }
   })
 }
 
@@ -347,87 +368,77 @@ export interface ReadCloudWorkerOptions {
   state: MonolithState
   projectDir: string
   accountId?: string
-  client?: CloudflareClient
+  client?: CloudflareClientService
   configPath?: string
   runWranglerDeployments?: RunWranglerDeploymentsList
 }
 
-export async function readCloudWorker(
+export function readCloudWorker(
   options: ReadCloudWorkerOptions
-): Promise<Result<CloudWorkerReadResult, CloudflareAuthError | CloudflareApiError | string>> {
-  const workerName = workerNameFromState(options.state)
-  if (!workerName) {
-    return err("State has no worker name to read from cloud")
-  }
-
-  let client = options.client
-  if (!client) {
-    const clientResult = await CloudflareClient.create({ projectDir: options.projectDir })
-    if (!clientResult.ok) {
-      return clientResult
+): Effect.Effect<
+  CloudWorkerReadResult,
+  CloudflareAuthError | CloudflareApiError | string
+> {
+  return Effect.gen(function* () {
+    const workerName = workerNameFromState(options.state)
+    if (!workerName) {
+      return yield* Effect.fail("State has no worker name to read from cloud")
     }
-    client = clientResult.value
-  }
 
-  let accountId = options.accountId
-  if (!accountId) {
-    const accountResult = await client.getAccountId()
-    if (!accountResult.ok) {
-      return accountResult
-    }
-    accountId = accountResult.value
-  }
+    const client = yield* resolveClient(options)
 
-  const limitations: string[] = [...READ_LIMITATIONS]
-  const runDeployments = options.runWranglerDeployments ?? runWranglerDeploymentsList
+    const resolvedAccountId = options.accountId ?? (yield* client.getAccountId())
 
-  const settingsResult = await readWorkerSettingsFromApi(client, accountId, workerName)
-  let bindings: CloudBindingHint[] | undefined
-  let compatibilityDate: string | undefined
-  let completeness: CloudWorkerReadResult["completeness"] = "deployments_only"
+    const limitations: string[] = [...READ_LIMITATIONS]
+    const runDeployments = options.runWranglerDeployments ?? runWranglerDeploymentsList
 
-  if (settingsResult.ok) {
-    bindings = normalizeCloudBindings(settingsResult.value.bindings)
-    compatibilityDate = settingsResult.value.compatibility_date
-    completeness = bindings.length > 0 ? "full" : "partial"
-  } else if (settingsResult.error.status === 404) {
-    limitations.push("Worker script not found in Cloudflare account — may never have been deployed.")
-  } else {
-    limitations.push(`Worker settings API unavailable: ${settingsResult.error.message}`)
-  }
-
-  const deploymentsResult = await runDeployments(
-    options.projectDir,
-    workerName,
-    options.configPath
-  )
-
-  let latestDeployment: CloudDeploymentHint | undefined
-  if (deploymentsResult.ok) {
-    latestDeployment = latestDeploymentFromRows(deploymentsResult.value)
-    if (completeness === "deployments_only" && latestDeployment) {
-      completeness = "partial"
-    }
-  } else {
-    limitations.push(`Wrangler deployments list unavailable: ${deploymentsResult.error}`)
-  }
-
-  if (!settingsResult.ok && !deploymentsResult.ok) {
-    return err(
-      settingsResult.ok
-        ? deploymentsResult.error
-        : settingsResult.error.message
+    const settingsResult = yield* Effect.result(
+      readWorkerSettingsFromApi(client, resolvedAccountId, workerName)
     )
-  }
 
-  return ok({
-    workerName,
-    accountId,
-    completeness,
-    latestDeployment,
-    bindings,
-    compatibilityDate,
-    limitations
+    let bindings: CloudBindingHint[] | undefined
+    let compatibilityDate: string | undefined
+    let completeness: CloudWorkerReadResult["completeness"] = "deployments_only"
+
+    if (settingsResult._tag === "Success") {
+      bindings = normalizeCloudBindings(settingsResult.success.bindings)
+      compatibilityDate = settingsResult.success.compatibility_date
+      completeness = bindings.length > 0 ? "full" : "partial"
+    } else if (settingsResult.failure.status === 404) {
+      limitations.push(
+        "Worker script not found in Cloudflare account — may never have been deployed."
+      )
+    } else {
+      limitations.push(`Worker settings API unavailable: ${settingsResult.failure.message}`)
+    }
+
+    const deploymentsResult = yield* Effect.result(
+      runDeployments(options.projectDir, workerName, options.configPath)
+    )
+
+    let latestDeployment: CloudDeploymentHint | undefined
+    if (deploymentsResult._tag === "Success") {
+      latestDeployment = latestDeploymentFromRows(deploymentsResult.success)
+      if (completeness === "deployments_only" && latestDeployment) {
+        completeness = "partial"
+      }
+    } else {
+      limitations.push(`Wrangler deployments list unavailable: ${deploymentsResult.failure}`)
+    }
+
+    if (settingsResult._tag === "Failure" && deploymentsResult._tag === "Failure") {
+      return yield* Effect.fail(settingsResult.failure.message)
+    }
+
+    return {
+      workerName,
+      accountId: resolvedAccountId,
+      completeness,
+      latestDeployment,
+      bindings,
+      compatibilityDate,
+      limitations
+    }
   })
 }
 

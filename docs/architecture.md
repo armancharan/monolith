@@ -1,17 +1,41 @@
 # Architecture
 
-Monolith is a TypeScript IaC layer for Cloudflare Workers. Wrangler remains the deploy engine; Monolith adds desired-state planning, per-stage local (or optional remote) state, and typed bindings.
+Monolith is an **Effect-native** TypeScript IaC layer for Cloudflare Workers. Wrangler remains the deploy engine; Monolith adds desired-state planning, per-stage local (or optional remote) state, and typed bindings — with `Context.Service`, `Layer`, and `Data.TaggedError` throughout.
 
 ## Packages
 
 | Package | Role |
 | --- | --- |
-| `@monolith/core` | Stack types, plan diff, state I/O, preview stage helpers, remote state interface |
-| `@monolith/cloudflare` | Wrangler import/parse, temp config, Cloudflare API client, R2 state backend |
-| `@monolith/cli` | `monolith` bin — import, plan, deploy, destroy, test, dev, typegen, state pull/push |
+| `@monolith/core` | `StateStore`, `PlanEngine`, `ReconcileProgram` Effect services; stack types; plan diff |
+| `@monolith/cloudflare` | Effect `stack()`; `CloudflareClient` + `WranglerDeployer` Layers; wrangler import; R2 state |
+| `@monolith/cli` | `monolith` bin — argv → Effect programs; `Effect.runPromise` at boundary |
 | `create-monolith` | Project scaffold (Hono + D1 + KV template) |
 | `@monolith/hono` | Optional Hono preset — `createHonoWorker(app)` |
-| `@monolith/effect` | Optional Effect Layer adapter for Effect-native apps |
+| `@monolith/effect` | `MonolithLive` layer + service/tag re-exports |
+
+## Effect services
+
+```mermaid
+flowchart TB
+  CLI[monolith CLI] -->|runPromise| Live[MonolithLive]
+  Live --> SS[StateStore]
+  Live --> PE[PlanEngine]
+  Live --> RP[ReconcileProgram]
+  Live --> CF[CloudflareClient]
+  Live --> WD[WranglerDeployer]
+  RP --> SS
+  RP --> PE
+  CF --> Auth[resolveCloudflareAuth]
+  WD --> Wrangler[npx wrangler]
+```
+
+- **StateStore** — `loadState`, `saveState`, `initStateFromImport`, `clearState` (filesystem I/O as `Effect`)
+- **PlanEngine** — wraps pure `planState` diff
+- **ReconcileProgram** — `evaluatePending`, desired resolution helpers
+- **CloudflareClient** — Workers Settings API, whoami
+- **WranglerDeployer** — subprocess deploy/dev/delete via `Effect.tryPromise`
+
+`stack()` in `@monolith/cloudflare` accepts `(ctx) => Effect.gen(...)`; `ctx.d1`, `ctx.worker`, etc. return `Effect` resources.
 
 ## Reconcile loop
 

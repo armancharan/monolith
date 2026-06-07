@@ -1,6 +1,7 @@
 import type { MonolithState } from "@monolith/core"
+import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
-import { CloudflareClient } from "./client.js"
+import { makeCloudflareClient } from "./services/CloudflareClient.js"
 import {
   buildCloudDriftHints,
   formatCloudDriftHints,
@@ -67,39 +68,35 @@ describe("readCloudWorker", () => {
       })
     })
 
-    const client = new CloudflareClient({
+    const client = makeCloudflareClient({
       token: "test-token",
       fetchImpl: fetchImpl as typeof fetch
     })
 
-    const runWranglerDeployments = vi.fn(async () =>
-      ({
-        ok: true,
-        value: [
-          {
-            Id: "dep-123",
-            Created: "2026-06-07T12:00:00.000Z",
-            Source: "wrangler deploy"
-          }
-        ]
-      }) as const
+    const runWranglerDeployments = vi.fn(() =>
+      Effect.succeed([
+        {
+          Id: "dep-123",
+          Created: "2026-06-07T12:00:00.000Z",
+          Source: "wrangler deploy"
+        }
+      ])
     )
 
-    const result = await readCloudWorker({
-      state: baseState(),
-      projectDir: "/tmp/project",
-      client,
-      accountId: "acct-1",
-      runWranglerDeployments
-    })
+    const result = await Effect.runPromise(
+      readCloudWorker({
+        state: baseState(),
+        projectDir: "/tmp/project",
+        client,
+        accountId: "acct-1",
+        runWranglerDeployments
+      })
+    )
 
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.value.workerName).toBe("demo-worker")
-      expect(result.value.completeness).toBe("full")
-      expect(result.value.bindings).toHaveLength(3)
-      expect(result.value.latestDeployment?.id).toBe("dep-123")
-    }
+    expect(result.workerName).toBe("demo-worker")
+    expect(result.completeness).toBe("full")
+    expect(result.bindings).toHaveLength(3)
+    expect(result.latestDeployment?.id).toBe("dep-123")
     expect(runWranglerDeployments).toHaveBeenCalledWith("/tmp/project", "demo-worker", undefined)
   })
 
@@ -117,29 +114,25 @@ describe("readCloudWorker", () => {
       })
     })
 
-    const client = new CloudflareClient({
+    const client = makeCloudflareClient({
       token: "test-token",
       fetchImpl: fetchImpl as typeof fetch
     })
 
-    const result = await readCloudWorker({
-      state: baseState(),
-      projectDir: "/tmp/project",
-      client,
-      accountId: "acct-1",
-      runWranglerDeployments: async () =>
-        ({
-          ok: true,
-          value: [{ id: "dep-only", created_on: "2026-06-07T12:00:00.000Z" }]
-        }) as const
-    })
+    const result = await Effect.runPromise(
+      readCloudWorker({
+        state: baseState(),
+        projectDir: "/tmp/project",
+        client,
+        accountId: "acct-1",
+        runWranglerDeployments: () =>
+          Effect.succeed([{ id: "dep-only", created_on: "2026-06-07T12:00:00.000Z" }])
+      })
+    )
 
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.value.completeness).toBe("partial")
-      expect(result.value.latestDeployment?.id).toBe("dep-only")
-      expect(result.value.bindings).toBeUndefined()
-    }
+    expect(result.completeness).toBe("partial")
+    expect(result.latestDeployment?.id).toBe("dep-only")
+    expect(result.bindings).toBeUndefined()
   })
 })
 

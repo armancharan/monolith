@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-07
+
+### Changed
+
+- **Effect-native core** — Monolith is built on Effect (`4.0.0-beta.54`), not a dual async/Result API.
+- `@monolith/core` — `StateStore`, `PlanEngine`, `ReconcileProgram` as `Context.Service`; `StateError`/`PlanError` as `Data.TaggedError`; removed `Result`/`ok`/`err`.
+- `@monolith/cloudflare` — `stack()` configure callback returns `Effect`; `CloudflareClient` and `WranglerDeployer` Layers; `readActualStack`/`resolveCloudflareAuth` return `Effect`.
+- `@monolith/cli` — all commands are Effect programs; `main.ts` uses `Effect.runPromise` with `MonolithLive`.
+- `@monolith/effect` — real `MonolithLive` composition + service re-exports (replaces thin stub adapter).
+- `monolith.run.ts` / templates — `Effect.gen` + `yield* ctx.d1(...)` authoring style.
+
+### Migration
+
+Replace async `stack("name", async (ctx) => { ctx.d1("DB") })` with:
+
+```typescript
+import { Effect } from "effect"
+import { stack } from "@monolith/cloudflare"
+
+export default stack("name", (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.worker("api")
+    yield* ctx.d1("DB", { databaseId: "..." })
+  })
+)
+```
+
+Library consumers: use `StateStore`/`PlanEngine` services and `makeMonolithLive(projectDir)` instead of `loadState`/`saveState`/`Result`.
+
 ## [0.2.0] - 2026-06-07
 
 ### Added
@@ -52,5 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Root and `@monolith/cli` version set to `0.1.0`; CLI prepared for public npm (`publishConfig.access: public`)
 
+[0.3.0]: https://github.com/armancharan/monolith/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/armancharan/monolith/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/armancharan/monolith/compare/v0.0.0...v0.1.0

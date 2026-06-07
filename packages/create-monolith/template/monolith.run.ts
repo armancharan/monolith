@@ -1,10 +1,10 @@
 import { Effect } from "effect"
 import { stack } from "@monolith/cloudflare"
 
-export default stack("example", (ctx) =>
+export default stack("my-worker", (ctx) =>
   Effect.gen(function* () {
-    yield* ctx.worker("api")
+    yield* ctx.worker("my-worker")
     yield* ctx.d1("DB")
-    yield* ctx.r2("ASSETS")
+    yield* ctx.kv("KV")
   })
 )

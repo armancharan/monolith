@@ -1,6 +1,6 @@
 {
   "name": "@monolith/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Monolith CLI — TypeScript IaC for Cloudflare Workers",
   "license": "Apache-2.0",
   "repository": {
@@ -27,6 +27,14 @@
     "./deploy": {
       "types": "./dist/deploy.d.ts",
       "import": "./dist/deploy.js"
+    },
+    "./live": {
+      "types": "./dist/live.d.ts",
+      "import": "./dist/live.js"
+    },
+    "./plan": {
+      "types": "./dist/plan.d.ts",
+      "import": "./dist/plan.js"
     }
   },
   "scripts": {
@@ -38,7 +46,9 @@
   },
   "dependencies": {
     "@monolith/cloudflare": "workspace:*",
-    "@monolith/core": "workspace:*"
+    "@monolith/core": "workspace:*",
+    "@monolith/effect": "workspace:*",
+    "effect": "4.0.0-beta.54"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

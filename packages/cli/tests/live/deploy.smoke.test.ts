@@ -1,11 +1,20 @@
-import { CloudflareClient, resolveCloudflareAuth } from "@monolith/cloudflare"
+import { Effect } from "effect"
+import {
+  makeCloudflareClient,
+  resolveCloudflareAuth
+} from "@monolith/cloudflare"
 import { describe, expect, it } from "vitest"
 
 const LIVE_ENABLED = process.env.MONOLITH_LIVE_TESTS === "1"
 
 async function hasCloudflareAuth(): Promise<boolean> {
-  const auth = await resolveCloudflareAuth()
-  return auth.ok
+  const result = await Effect.runPromise(
+    resolveCloudflareAuth().pipe(
+      Effect.map(() => true),
+      Effect.catch(() => Effect.succeed(false))
+    )
+  )
+  return result
 }
 
 describe("live deploy smoke", () => {
@@ -24,18 +33,12 @@ describe("live deploy smoke", () => {
       return
     }
 
-    const clientResult = await CloudflareClient.create()
-    expect(clientResult.ok).toBe(true)
-    if (!clientResult.ok) {
-      return
-    }
+    const auth = await Effect.runPromise(resolveCloudflareAuth())
+    const client = makeCloudflareClient({ token: auth.token })
+    const whoami = await Effect.runPromise(client.whoami())
 
-    const whoami = await clientResult.value.whoami()
-    expect(whoami.ok).toBe(true)
-    if (whoami.ok) {
-      expect(whoami.value.user.id).toBeTruthy()
-      expect(whoami.value.accounts.length).toBeGreaterThan(0)
-    }
+    expect(whoami.user.id).toBeTruthy()
+    expect(whoami.accounts.length).toBeGreaterThan(0)
   })
 
   it("optional worker /health responds when MONOLITH_LIVE_WORKER_URL is set", async (ctx) => {

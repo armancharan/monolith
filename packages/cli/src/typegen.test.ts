@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { afterEach, describe, expect, it } from "vitest"
 import { runTypegen, writeMonolithEnvTypes } from "./typegen.js"
+import { runCli } from "./runtime.js"
 import { parseWranglerConfigText } from "@monolith/cloudflare"
 
 describe("typegen CLI", () => {
@@ -59,7 +60,7 @@ describe("typegen CLI", () => {
       "wrangler.jsonc"
     )
 
-    const relativePath = await writeMonolithEnvTypes(projectDir, result)
+    const relativePath = await runCli(projectDir, writeMonolithEnvTypes(projectDir, result))
     expect(relativePath).toBe("src/monolith.env.d.ts")
 
     const generated = await readFile(join(projectDir, relativePath), "utf8")
@@ -74,7 +75,7 @@ describe("typegen CLI", () => {
 
     try {
       process.chdir(projectDir)
-      const code = await runTypegen(["--stage", "dev"])
+      const code = await runCli(projectDir, runTypegen(["--stage", "dev"]))
       expect(code).toBe(0)
 
       const generated = await readFile(join(projectDir, "src/monolith.env.d.ts"), "utf8")

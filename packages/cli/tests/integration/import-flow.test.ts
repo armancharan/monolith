@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { constants } from "node:fs"
 import { afterEach, describe, expect, it } from "vitest"
 import { runImport } from "../../src/import.js"
+import { runCli } from "../../src/runtime.js"
 import { createFixtureProject, listImportSnapshots } from "./helpers.js"
 
 describe("import flow integration", () => {
@@ -16,11 +17,14 @@ describe("import flow integration", () => {
     const projectDir = await createFixtureProject()
     tempDirs.push(projectDir)
 
-    const code = await runImport([
-      join(projectDir, "wrangler.jsonc"),
-      "--stage",
-      "dev"
-    ])
+    const code = await runCli(
+      projectDir,
+      runImport([
+        join(projectDir, "wrangler.jsonc"),
+        "--stage",
+        "dev"
+      ])
+    )
 
     expect(code).toBe(0)
 

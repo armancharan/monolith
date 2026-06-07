@@ -1,18 +1,43 @@
+import { PlanError, StateError } from "@monolith/core"
+import {
+  CloudflareApiError,
+  CloudflareAuthError,
+  WranglerError
+} from "@monolith/cloudflare"
+import { Effect } from "effect"
 import { printHelp, runCommand, type CommandName } from "./commands.js"
+import { makeMonolithLive } from "./live.js"
 
-const VERSION = "0.0.0"
+const VERSION = "0.3.0"
 const argv = process.argv.slice(2)
 const first = argv[0]
 
-async function main(): Promise<void> {
+const handleTaggedError = (error: unknown): number => {
+  if (
+    error instanceof StateError ||
+    error instanceof PlanError ||
+    error instanceof CloudflareAuthError ||
+    error instanceof CloudflareApiError ||
+    error instanceof WranglerError
+  ) {
+    console.error(error.message)
+    return 1
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(message)
+  return 1
+}
+
+const program = Effect.gen(function* () {
   if (first === "--version" || first === "-v") {
     console.log(VERSION)
-    process.exit(0)
+    return 0
   }
 
   if (!first || first === "--help" || first === "-h") {
     printHelp()
-    process.exit(0)
+    return 0
   }
 
   const known = new Set<CommandName>([
@@ -31,15 +56,21 @@ async function main(): Promise<void> {
   if (!known.has(first as CommandName)) {
     console.error(`Unknown command: ${first}`)
     printHelp()
-    process.exit(1)
+    return 1
   }
 
-  const code = await runCommand(first as CommandName, argv.slice(1))
-  process.exit(code)
-}
+  return yield* runCommand(first as CommandName, argv.slice(1))
+}).pipe(
+  Effect.catch((error) => Effect.succeed(handleTaggedError(error)))
+)
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  console.error(message)
-  process.exit(1)
-})
+const runnable = Effect.provide(program, makeMonolithLive()).pipe(
+  Effect.catch((error) => Effect.succeed(handleTaggedError(error)))
+) as Effect.Effect<number, never, never>
+
+Effect.runPromise(runnable).then(
+  (code) => process.exit(code),
+  (error: unknown) => {
+    process.exit(handleTaggedError(error))
+  }
+)

@@ -1,4 +1,5 @@
-import { loadState } from "@monolith/core"
+import { StateStore } from "@monolith/core"
+import { Effect } from "effect"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import {
@@ -9,6 +10,7 @@ import {
 import { runDeploy, type RunWranglerDeploy } from "./deploy.js"
 import { runDestroy, type RunWranglerDelete } from "./destroy.js"
 import { evaluatePlan } from "./plan.js"
+import { tryPromiseOr } from "./effect-helpers.js"
 import { parseStageArgs, requireStage } from "./stage.js"
 
 const DEFAULT_STAGE = "dev"
@@ -92,88 +94,119 @@ export async function runHttpSmokeCheck(
   }
 }
 
-export async function runTest(args: string[], options?: TestHarnessOptions): Promise<number> {
-  const { stage, destroyAfter } = parseArgs(args)
-  if (!stage) {
-    return 1
-  }
-  const projectDir = options?.projectDir ?? process.cwd()
-  const httpFetch = options?.httpFetch ?? defaultHttpFetch
+export const runTest = (
+  args: string[],
+  options?: TestHarnessOptions
+): Effect.Effect<
+  number,
+  never,
+  import("./commands.js").CommandServices
+> =>
+  Effect.gen(function* () {
+    const { stage, destroyAfter } = parseArgs(args)
+    if (!stage) {
+      return 1
+    }
+    const projectDir = options?.projectDir ?? process.cwd()
+    const httpFetch = options?.httpFetch ?? defaultHttpFetch
+    const stateStore = yield* StateStore
 
-  const stateResult = await loadState(stage, projectDir)
-  if (!stateResult.ok) {
-    console.error(stateResult.error.message)
-    console.error("Run `monolith import ... --stage <name>` or `monolith state init` first.")
-    return 1
-  }
-
-  const planEval = await evaluatePlan(stage, projectDir)
-  if (!planEval.ok) {
-    console.error(planEval.message)
-    return planEval.exitCode
-  }
-
-  if (planEval.value.pending.hasChanges) {
-    console.log(`Plan has pending changes for stage "${stage}" — proceeding with deploy (--auto-approve).`)
-  } else {
-    console.log(`Plan clean for stage "${stage}".`)
-  }
-
-  const deployCode = await runDeploy(["--stage", stage, "--auto-approve"], {
-    projectDir,
-    runWrangler: options?.runWranglerDeploy
-  })
-  if (deployCode !== 0) {
-    return deployCode
-  }
-
-  const refreshed = await loadState(stage, projectDir)
-  const workerUrl = refreshed.ok ? refreshed.value.workerUrl : stateResult.value.workerUrl
-  const testUrl = resolveTestUrl(workerUrl, process.env.MONOLITH_TEST_URL)
-
-  const assertionFile = await loadAssertionFile(projectDir)
-  const routes = assertionFile ? normalizeAssertionRoutes(assertionFile) : []
-
-  if (routes.length > 0) {
-    if (!testUrl) {
-      console.error(
-        "Assertions require a worker URL. Deploy must capture workerUrl in state or set MONOLITH_TEST_URL."
+    const initialState = yield* stateStore.loadState(stage).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          console.error(error.message)
+          console.error("Run `monolith import ... --stage <name>` or `monolith state init` first.")
+          return 1
+        })
       )
-      return 1
+    )
+
+    if (typeof initialState === "number") {
+      return initialState
     }
 
-    console.log(`Running ${routes.length} route assertion(s) from ${ASSERTIONS_DIR}/assertions.json:`)
-    const assertionResult = await evaluateRouteAssertions(testUrl, routes, httpFetch)
-    if (!assertionResult.ok) {
-      console.error(assertionResult.message)
-      return 1
-    }
-    console.log("  Route assertions passed.")
-  } else if (testUrl) {
-    console.log(`Running HTTP smoke check: ${testUrl}`)
-    const smoke = await runHttpSmokeCheck(testUrl, httpFetch)
-    if (!smoke.ok) {
-      console.error(smoke.message)
-      return 1
-    }
-    console.log("  HTTP smoke passed (2xx).")
-  } else {
-    console.log("Skipping HTTP checks (set MONOLITH_TEST_URL or deploy to capture workerUrl in state).")
-  }
+    const planEval = yield* evaluatePlan(stage, projectDir).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          console.error(error.message)
+          return 1
+        })
+      )
+    )
 
-  if (destroyAfter) {
-    console.log("")
-    console.log(`Teardown: destroy stage "${stage}" (--destroy-after).`)
-    return runDestroy(["--stage", stage, "--auto-approve"], {
+    if (typeof planEval === "number") {
+      return planEval
+    }
+
+    if (planEval.pending.hasChanges) {
+      console.log(
+        `Plan has pending changes for stage "${stage}" — proceeding with deploy (--auto-approve).`
+      )
+    } else {
+      console.log(`Plan clean for stage "${stage}".`)
+    }
+
+    const deployCode = yield* runDeploy(["--stage", stage, "--auto-approve"], {
       projectDir,
-      runWranglerDelete: options?.runWranglerDelete
+      runWrangler: options?.runWranglerDeploy
     })
-  }
 
-  console.log("")
-  console.log(`Test harness finished for stage "${stage}".`)
-  return 0
-}
+    if (deployCode !== 0) {
+      return deployCode
+    }
 
-// Re-export for tests
+    const refreshed = yield* stateStore.loadState(stage).pipe(Effect.result)
+    const workerUrl = refreshed._tag === "Success" ? refreshed.success.workerUrl : initialState.workerUrl
+    const testUrl = resolveTestUrl(workerUrl, process.env.MONOLITH_TEST_URL)
+
+    const assertionFile = yield* tryPromiseOr(() => loadAssertionFile(projectDir), undefined)
+    const routes = assertionFile ? normalizeAssertionRoutes(assertionFile) : []
+
+    if (routes.length > 0) {
+      if (!testUrl) {
+        console.error(
+          "Assertions require a worker URL. Deploy must capture workerUrl in state or set MONOLITH_TEST_URL."
+        )
+        return 1
+      }
+
+      console.log(`Running ${routes.length} route assertion(s) from ${ASSERTIONS_DIR}/assertions.json:`)
+      const assertionResult = yield* tryPromiseOr(
+        () => evaluateRouteAssertions(testUrl, routes, httpFetch),
+        { ok: false as const, message: "assertion failed" }
+      )
+      if (!assertionResult.ok) {
+        console.error(assertionResult.message)
+        return 1
+      }
+      console.log("  Route assertions passed.")
+    } else if (testUrl) {
+      console.log(`Running HTTP smoke check: ${testUrl}`)
+      const smoke = yield* tryPromiseOr(
+        () => runHttpSmokeCheck(testUrl, httpFetch),
+        { ok: false as const, message: "smoke check failed" }
+      )
+      if (!smoke.ok) {
+        console.error(smoke.message)
+        return 1
+      }
+      console.log("  HTTP smoke passed (2xx).")
+    } else {
+      console.log("Skipping HTTP checks (set MONOLITH_TEST_URL or deploy to capture workerUrl in state).")
+    }
+
+    if (destroyAfter) {
+      console.log("")
+      console.log(`Teardown: destroy stage "${stage}" (--destroy-after).`)
+      return yield* runDestroy(["--stage", stage, "--auto-approve"], {
+        projectDir,
+        runWranglerDelete: options?.runWranglerDelete
+      })
+    }
+
+    console.log("")
+    console.log(`Test harness finished for stage "${stage}".`)
+    return 0
+  })
+
 export type { TestAssertionFile } from "./assertions.js"

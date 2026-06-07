@@ -1,4 +1,6 @@
-import { IMPORT_DIR, initStateFromImport } from "@monolith/core"
+import { IMPORT_DIR, StateStore } from "@monolith/core"
+import { tryPromiseOr } from "./effect-helpers.js"
+import { Effect } from "effect"
 import { readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 
@@ -24,61 +26,69 @@ function parseArgs(args: string[]): {
   return parsed
 }
 
-async function latestImportSnapshot(projectDir: string): Promise<string | undefined> {
-  const importDir = join(projectDir, IMPORT_DIR)
-  let entries: string[]
-  try {
-    entries = await readdir(importDir)
-  } catch {
-    return undefined
-  }
+const latestImportSnapshot = (
+  projectDir: string
+): Effect.Effect<string | undefined, never> =>
+  Effect.gen(function* () {
+    const importDir = join(projectDir, IMPORT_DIR)
+    const entries = yield* tryPromiseOr(() => readdir(importDir), [] as string[])
 
-  const jsonFiles = entries.filter((entry) => entry.endsWith(".json"))
-  if (jsonFiles.length === 0) {
-    return undefined
-  }
-
-  let latestPath: string | undefined
-  let latestMtime = 0
-
-  for (const file of jsonFiles) {
-    const filePath = join(importDir, file)
-    const fileStat = await stat(filePath)
-    if (fileStat.mtimeMs >= latestMtime) {
-      latestMtime = fileStat.mtimeMs
-      latestPath = `${IMPORT_DIR}/${file}`
+    const jsonFiles = entries.filter((entry) => entry.endsWith(".json"))
+    if (jsonFiles.length === 0) {
+      return undefined
     }
-  }
 
-  return latestPath
-}
+    let latestPath: string | undefined
+    let latestMtime = 0
 
-export async function runStateInit(args: string[]): Promise<number> {
-  const { stage, from } = parseArgs(args)
-  if (!stage) {
-    console.error("Usage: monolith state init --stage <name> [--from .monolith/import/<hash>.json]")
-    return 1
-  }
+    for (const file of jsonFiles) {
+      const filePath = join(importDir, file)
+      const fileStat = yield* tryPromiseOr(() => stat(filePath), undefined)
+      if (fileStat && fileStat.mtimeMs >= latestMtime) {
+        latestMtime = fileStat.mtimeMs
+        latestPath = `${IMPORT_DIR}/${file}`
+      }
+    }
 
-  const projectDir = process.cwd()
-  const importPath = from ?? (await latestImportSnapshot(projectDir))
-  if (!importPath) {
-    console.error("No import snapshot found. Run `monolith import` first or pass --from.")
-    return 1
-  }
+    return latestPath
+  })
 
-  const result = await initStateFromImport(importPath, stage, projectDir)
-  if (!result.ok) {
-    console.error(result.error.message)
-    return 1
-  }
+export const runStateInit = (
+  args: string[]
+): Effect.Effect<number, never, StateStore> =>
+  Effect.gen(function* () {
+    const { stage, from } = parseArgs(args)
+    if (!stage) {
+      console.error("Usage: monolith state init --stage <name> [--from .monolith/import/<hash>.json]")
+      return 1
+    }
 
-  const state = result.value
-  console.log(`Initialized state for stage "${stage}"`)
-  console.log(`  Stack: ${state.stackName}`)
-  console.log(`  Resources: ${state.resources.length}`)
-  console.log(`  Import hash: ${state.importHash ?? "(none)"}`)
-  console.log(`  Wrote .monolith/state/${stage}.json`)
+    const projectDir = process.cwd()
+    const importPath = from ?? (yield* latestImportSnapshot(projectDir))
+    if (!importPath) {
+      console.error("No import snapshot found. Run `monolith import` first or pass --from.")
+      return 1
+    }
 
-  return 0
-}
+    const stateStore = yield* StateStore
+    const state = yield* stateStore.initStateFromImport(importPath, stage).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          console.error(error.message)
+          return 1
+        })
+      )
+    )
+
+    if (typeof state === "number") {
+      return state
+    }
+
+    console.log(`Initialized state for stage "${stage}"`)
+    console.log(`  Stack: ${state.stackName}`)
+    console.log(`  Resources: ${state.resources.length}`)
+    console.log(`  Import hash: ${state.importHash ?? "(none)"}`)
+    console.log(`  Wrote .monolith/state/${stage}.json`)
+
+    return 0
+  })

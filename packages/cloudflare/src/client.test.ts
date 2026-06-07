@@ -1,5 +1,6 @@
+import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
-import { CloudflareClient } from "./client.js"
+import { makeCloudflareClient } from "./services/CloudflareClient.js"
 
 describe("CloudflareClient", () => {
   it("whoami returns user and accounts from mocked API", async () => {
@@ -31,18 +32,15 @@ describe("CloudflareClient", () => {
       })
     })
 
-    const client = new CloudflareClient({
+    const client = makeCloudflareClient({
       token: "test-token",
       auth: { token: "test-token", source: "env:api_token" },
       fetchImpl: fetchImpl as typeof fetch
     })
 
-    const result = await client.whoami()
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.value.user.email).toBe("dev@example.com")
-      expect(result.value.accounts).toEqual([{ id: "acct-1", name: "Example Account" }])
-    }
+    const result = await Effect.runPromise(client.whoami())
+    expect(result.user.email).toBe("dev@example.com")
+    expect(result.accounts).toEqual([{ id: "acct-1", name: "Example Account" }])
   })
 
   it("getAccountId returns first account id", async () => {
@@ -56,16 +54,13 @@ describe("CloudflareClient", () => {
       )
     )
 
-    const client = new CloudflareClient({
+    const client = makeCloudflareClient({
       token: "test-token",
       fetchImpl: fetchImpl as typeof fetch
     })
 
-    const result = await client.getAccountId()
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.value).toBe("acct-default")
-    }
+    const result = await Effect.runPromise(client.getAccountId())
+    expect(result).toBe("acct-default")
   })
 
   it("returns API error on non-success response", async () => {
@@ -79,16 +74,14 @@ describe("CloudflareClient", () => {
       )
     )
 
-    const client = new CloudflareClient({
+    const client = makeCloudflareClient({
       token: "bad-token",
       fetchImpl: fetchImpl as typeof fetch
     })
 
-    const result = await client.request("/user")
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.error.status).toBe(401)
-      expect(result.error.message).toContain("Unauthorized")
-    }
+    await expect(Effect.runPromise(client.request("/user"))).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining("Unauthorized")
+    })
   })
 })

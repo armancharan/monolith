@@ -1,11 +1,13 @@
-import { StateError, type MonolithState, type Result } from "./state.js"
+import type { Effect } from "effect"
+import type { StateError } from "./errors.js"
+import type { MonolithState } from "./state.js"
 
 export type StateBackendKind = "local" | "r2"
 
 export interface RemoteStateBackend {
   readonly kind: StateBackendKind
-  pull(stage: string): Promise<Result<MonolithState, StateError>>
-  push(stage: string, state: MonolithState): Promise<Result<void, StateError>>
+  pull(stage: string): Effect.Effect<MonolithState, StateError>
+  push(stage: string, state: MonolithState): Effect.Effect<void, StateError>
 }
 
 export function stateObjectKey(stage: string): string {

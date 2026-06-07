@@ -1,7 +1,7 @@
 {
   "name": "@monolith/effect",
-  "version": "0.2.0",
-  "description": "Effect adapter for Monolith — optional layer for Effect-native apps",
+  "version": "0.3.0",
+  "description": "Effect-native Monolith — MonolithLive layer and service re-exports",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -19,14 +19,14 @@
     }
   },
   "peerDependencies": {
-    "@monolith/cloudflare": "^0.2.0",
-    "@monolith/core": "^0.2.0",
-    "effect": "^3.0.0"
+    "@monolith/cloudflare": "^0.3.0",
+    "@monolith/core": "^0.3.0",
+    "effect": "^4.0.0-beta.54"
   },
   "dependencies": {
-    "@monolith/cli": "workspace:*",
     "@monolith/cloudflare": "workspace:*",
-    "@monolith/core": "workspace:*"
+    "@monolith/core": "workspace:*",
+    "effect": "4.0.0-beta.54"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -34,7 +34,6 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "effect": "^3.16.5",
     "vitest": "^3.2.4"
   }
 }

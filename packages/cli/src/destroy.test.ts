@@ -9,6 +9,7 @@ import {
   runDestroy,
   type RunWranglerDelete
 } from "./destroy.js"
+import { runCli } from "./runtime.js"
 
 describe("findWorkerResource", () => {
   it("returns the worker resource from state resources", () => {
@@ -76,10 +77,13 @@ describe("runDestroy", () => {
       output: "deleted\n"
     })
 
-    const code = await runDestroy(["--stage", "dev"], {
+    const code = await runCli(
+      projectDir,
+      runDestroy(["--stage", "dev"], {
       projectDir,
       runWranglerDelete: mockDelete
-    })
+      })
+    )
 
     expect(code).toBe(1)
     await expect(readFile(join(projectDir, ".monolith", "state", "dev.json"), "utf8")).resolves.toBeDefined()
@@ -104,10 +108,13 @@ describe("runDestroy", () => {
       return { exitCode: 0, output: "Deleted script demo-worker\n" }
     }
 
-    const code = await runDestroy(["--stage", "dev", "--auto-approve"], {
+    const code = await runCli(
+      projectDir,
+      runDestroy(["--stage", "dev", "--auto-approve"], {
       projectDir,
       runWranglerDelete: mockDelete
-    })
+      })
+    )
 
     expect(code).toBe(0)
     await expect(readFile(join(projectDir, ".monolith", "state", "dev.json"), "utf8")).rejects.toThrow()
@@ -127,10 +134,13 @@ describe("runDestroy", () => {
       output: "not found\n"
     })
 
-    const code = await runDestroy(["--stage", "dev", "--auto-approve"], {
+    const code = await runCli(
+      projectDir,
+      runDestroy(["--stage", "dev", "--auto-approve"], {
       projectDir,
       runWranglerDelete: mockDelete
-    })
+      })
+    )
 
     expect(code).toBe(1)
     await expect(readFile(join(projectDir, ".monolith", "state", "dev.json"), "utf8")).resolves.toBeDefined()
@@ -149,10 +159,13 @@ describe("runDestroy", () => {
       throw new Error("should not call wrangler delete")
     }
 
-    const code = await runDestroy(["--stage", "dev", "--auto-approve"], {
+    const code = await runCli(
+      projectDir,
+      runDestroy(["--stage", "dev", "--auto-approve"], {
       projectDir,
       runWranglerDelete: mockDelete
-    })
+      })
+    )
 
     expect(code).toBe(0)
     await expect(readFile(join(projectDir, ".monolith", "state", "dev.json"), "utf8")).rejects.toThrow()

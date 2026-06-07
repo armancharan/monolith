@@ -7,5 +7,5 @@
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../cli" }, { "path": "../core" }, { "path": "../cloudflare" }]
+  "references": [{ "path": "../core" }, { "path": "../cloudflare" }]
 }

@@ -11,23 +11,25 @@ export {
   type RemoteStateBackend,
   type StateBackendKind
 } from "./remote-state.js"
+export { PlanError, StateError } from "./errors.js"
 export {
-  clearState,
-  err,
-  initStateFromImport,
-  loadState,
-  ok,
   resourcesFromImport,
-  saveState,
   stateFilePath,
   stateFromImportSnapshot,
-  StateError,
   type ImportSnapshot,
   type MonolithState,
-  type Result,
   type StateResource
 } from "./state.js"
-export { formatCloudPlan, formatPlan, formatPlanSection, planState, type CloudPlanSections, type PlanChange, type PlanResult } from "./plan.js"
+export {
+  formatCloudPlan,
+  formatPlan,
+  formatPlanSection,
+  planState,
+  type CloudPlanSections,
+  type PlanChange,
+  type PlanDesiredSource,
+  type PlanResult
+} from "./plan.js"
 export {
   createStackContext,
   stack,
@@ -36,3 +38,19 @@ export {
   type StackModule
 } from "./stack.js"
 export type { Resource, Stack } from "./types.js"
+export {
+  PlanEngine,
+  PlanEngineLive
+} from "./services/PlanEngine.js"
+export {
+  StateStore,
+  StateStoreLive,
+  makeStateStore,
+  makeStateStoreLayer
+} from "./services/StateStore.js"
+export {
+  CoreServicesLive,
+  ReconcileProgram,
+  ReconcileProgramLive,
+  type ResolvedDesired
+} from "./services/ReconcileProgram.js"
