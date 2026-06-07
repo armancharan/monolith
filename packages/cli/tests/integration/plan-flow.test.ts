@@ -37,7 +37,7 @@ describe("plan flow integration", () => {
       return
     }
 
-    expect(evaluated.value.plan.hasChanges).toBe(true)
-    expect(evaluated.value.plan.changes.some((change) => change.resource.id === "kv:KV")).toBe(true)
+    expect(evaluated.value.pending.hasChanges).toBe(true)
+    expect(evaluated.value.pending.changes.some((change) => change.resource.id === "kv:KV")).toBe(true)
   })
 })

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   parseWorkerUrlFromWranglerOutput,
   runDeploy,
@@ -157,6 +157,42 @@ describe("runDeploy", () => {
     })
 
     expect(code).toBe(0)
+  })
+
+  it("runs wrangler deploy twice when DO migration is configured", async () => {
+    const projectDir = await makeProject("dev", {
+      stackName: "demo-worker",
+      stage: "dev",
+      resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      wranglerConfigPath: "wrangler.jsonc"
+    })
+
+    await writeFile(
+      join(projectDir, "wrangler.jsonc"),
+      `{
+  "name": "demo-worker",
+  "main": "src/index.ts",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "ChatRoom" }],
+    "migrations": [{ "tag": "v1", "new_classes": ["ChatRoom"] }]
+  }
+}
+`
+    )
+
+    const mockDeploy: RunWranglerDeploy = vi.fn(async () => ({
+      exitCode: 0,
+      output: "Deployed https://demo-worker.example.workers.dev\n"
+    }))
+
+    const code = await runDeploy(["--stage", "dev", "--auto-approve"], {
+      projectDir,
+      runWrangler: mockDeploy
+    })
+
+    expect(code).toBe(0)
+    expect(mockDeploy).toHaveBeenCalledTimes(2)
   })
 
   it("uses preview worker suffix and temp config for pr-* stages", async () => {

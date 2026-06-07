@@ -1,4 +1,5 @@
 import {
+  formatCloudPlan,
   formatPlan,
   IMPORT_DIR,
   loadState,
@@ -14,6 +15,7 @@ import {
   formatCloudDriftHints,
   hashWranglerContent,
   parseWranglerConfigText,
+  readActualStack,
   readCloudWorker,
   toImportSnapshot,
   WranglerParseError
@@ -28,11 +30,22 @@ export type DesiredSource = "stack" | "wrangler" | "import"
 
 export type CloudPlanMode = "auto" | "on" | "off"
 
-function parseArgs(args: string[]): { stage?: string; cloud: CloudPlanMode; preview: boolean } {
+function parseArgs(args: string[]): {
+  stage?: string
+  cloud: CloudPlanMode
+  localOnly: boolean
+  preview: boolean
+} {
   const stageParsed = parseStageArgs(args)
-  const parsed: { stage?: string; cloud: CloudPlanMode; preview: boolean } = {
+  const parsed: {
+    stage?: string
+    cloud: CloudPlanMode
+    localOnly: boolean
+    preview: boolean
+  } = {
     stage: stageParsed.stage,
     cloud: "auto",
+    localOnly: false,
     preview: stageParsed.preview
   }
 
@@ -42,6 +55,10 @@ function parseArgs(args: string[]): { stage?: string; cloud: CloudPlanMode; prev
       parsed.cloud = "on"
     }
     if (arg === "--no-cloud") {
+      parsed.cloud = "off"
+    }
+    if (arg === "--local-only") {
+      parsed.localOnly = true
       parsed.cloud = "off"
     }
   }
@@ -177,9 +194,49 @@ export async function resolveDesiredState(
   return undefined
 }
 
-export interface EvaluatePlanResult {
-  current: MonolithState
-  plan: PlanResult
+export interface CloudActualResult {
+  actual?: MonolithState
+  drift?: PlanResult
+  skippedReason?: string
+}
+
+export async function resolveCloudActual(
+  persisted: MonolithState,
+  desired: MonolithState,
+  projectDir: string,
+  cloudMode: CloudPlanMode
+): Promise<CloudActualResult | undefined> {
+  if (cloudMode === "off") {
+    return undefined
+  }
+
+  const clientResult = await CloudflareClient.create({ projectDir })
+  if (!clientResult.ok) {
+    if (cloudMode === "on") {
+      return { skippedReason: clientResult.error.message }
+    }
+    return undefined
+  }
+
+  const actualResult = await readActualStack({
+    state: persisted,
+    projectDir,
+    client: clientResult.value
+  })
+
+  if (!actualResult.ok) {
+    const message =
+      typeof actualResult.error === "string" ? actualResult.error : actualResult.error.message
+    if (cloudMode === "on") {
+      return { skippedReason: message }
+    }
+    return undefined
+  }
+
+  const actual = actualResult.value
+  const drift = planState(actual, desired)
+  drift.desiredSource = "import"
+  return { actual, drift }
 }
 
 export async function resolveCloudDrift(
@@ -225,9 +282,18 @@ export async function resolveCloudDrift(
   return buildCloudDriftHints(current, readResult.value)
 }
 
+export interface EvaluatePlanResult {
+  current: MonolithState
+  desired: MonolithState
+  desiredSource: DesiredSource
+  pending: PlanResult
+  cloud?: CloudActualResult
+}
+
 export async function evaluatePlan(
   stage: string,
-  projectDir: string
+  projectDir: string,
+  options?: { cloudMode?: CloudPlanMode }
 ): Promise<
   | { ok: true; value: EvaluatePlanResult }
   | { ok: false; exitCode: number; message: string }
@@ -258,26 +324,39 @@ export async function evaluatePlan(
     return { ok: false, exitCode: 1, message }
   }
 
-  const plan = planState(current, desiredResult.state)
-  plan.desiredSource = desiredResult.source
-  return { ok: true, value: { current, plan } }
+  const pending = planState(current, desiredResult.state)
+  pending.desiredSource = desiredResult.source
+
+  const cloudMode = options?.cloudMode ?? "auto"
+  const cloud = await resolveCloudActual(current, desiredResult.state, projectDir, cloudMode)
+
+  return {
+    ok: true,
+    value: {
+      current,
+      desired: desiredResult.state,
+      desiredSource: desiredResult.source,
+      pending,
+      cloud
+    }
+  }
 }
 
 export async function runPlan(
   args: string[],
   options?: { projectDir?: string }
 ): Promise<number> {
-  const { stage: parsedStage, cloud, preview } = parseArgs(args)
+  const { stage: parsedStage, cloud, localOnly, preview } = parseArgs(args)
   const stage = requireStage(
     { stage: parsedStage, preview },
-    "Usage: monolith plan --stage <name> [--preview] [--cloud] [--no-cloud]"
+    "Usage: monolith plan --stage <name> [--preview] [--cloud] [--no-cloud] [--local-only]"
   )
   if (!stage) {
     return 1
   }
 
   const projectDir = options?.projectDir ?? process.cwd()
-  const evaluated = await evaluatePlan(stage, projectDir)
+  const evaluated = await evaluatePlan(stage, projectDir, { cloudMode: cloud })
   if (!evaluated.ok) {
     console.error(evaluated.message)
     if (evaluated.message.includes("State file not found")) {
@@ -286,12 +365,23 @@ export async function runPlan(
     return evaluated.exitCode
   }
 
-  const { current, plan } = evaluated.value
-  let output = formatPlan(stage, current, plan)
+  const { current, desiredSource, pending, cloud: cloudActual } = evaluated.value
+
+  let output: string
+  if (localOnly || !cloudActual) {
+    output = formatPlan(stage, current, pending)
+  } else {
+    output = formatCloudPlan(stage, current.stackName, {
+      desiredSource,
+      drift: cloudActual.drift,
+      pending,
+      cloudSkippedReason: cloudActual.skippedReason
+    })
+  }
 
   const configPath = current.wranglerConfigPath
   const cloudDrift = await resolveCloudDrift(current, projectDir, cloud, configPath)
-  if (cloudDrift) {
+  if (cloudDrift && !localOnly) {
     output += formatCloudDriftHints(cloudDrift)
   }
 

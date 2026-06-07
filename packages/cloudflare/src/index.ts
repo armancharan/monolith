@@ -30,6 +30,7 @@ export {
   WranglerParseError,
   type WranglerD1Database,
   type WranglerDurableObject,
+  type WranglerDurableObjectMigration,
   type WranglerImportResult,
   type WranglerImportSnapshot,
   type WranglerKvNamespace,
@@ -38,8 +39,18 @@ export {
   type WranglerStackResources
 } from "./wrangler-import.js"
 export {
+  deployWithDoMigration,
+  detectDoMigrations,
+  type DoMigrationInfo,
+  type RunWranglerDeployFn,
+  type WranglerDeployOutcome
+} from "./do-migration.js"
+export {
   buildCloudDriftHints,
+  bindingsToStateResources,
   formatCloudDriftHints,
+  readActualStack,
+  readActualWorker,
   readCloudWorker,
   readWorkerSettingsFromApi,
   runWranglerDeploymentsList,
@@ -47,6 +58,7 @@ export {
   type CloudDeploymentHint,
   type CloudDriftHints,
   type CloudWorkerReadResult,
+  type ReadActualStackOptions,
   type ReadCloudWorkerOptions,
   type RunWranglerDeploymentsList
 } from "./read.js"

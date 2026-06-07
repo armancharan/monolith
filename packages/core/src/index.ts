@@ -13,7 +13,7 @@ export {
   type MonolithState,
   type StateResource
 } from "./state.js"
-export { formatPlan, planState, type PlanChange, type PlanResult } from "./plan.js"
+export { formatCloudPlan, formatPlan, formatPlanSection, planState, type CloudPlanSections, type PlanChange, type PlanResult } from "./plan.js"
 export {
   createStackContext,
   stack,

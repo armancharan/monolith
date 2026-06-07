@@ -1,6 +1,7 @@
 import { readFile, rm } from "node:fs/promises"
 import { join } from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { CloudflareAuthError, CloudflareClient } from "@monolith/cloudflare"
 import { runDeploy, type RunWranglerDeploy } from "../../src/deploy.js"
 import { runImport } from "../../src/import.js"
 import { evaluatePlan } from "../../src/plan.js"
@@ -11,9 +12,15 @@ describe("full flow integration", () => {
 
   afterEach(async () => {
     await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+    vi.restoreAllMocks()
   })
 
   it("runs import → clean plan → mock deploy and records workerUrl", async () => {
+    vi.spyOn(CloudflareClient, "create").mockResolvedValue({
+      ok: false,
+      error: new CloudflareAuthError("missing token")
+    })
+
     const projectDir = await createFixtureProject()
     tempDirs.push(projectDir)
 
@@ -29,7 +36,7 @@ describe("full flow integration", () => {
     if (!planEval.ok) {
       return
     }
-    expect(planEval.value.plan.hasChanges).toBe(false)
+    expect(planEval.value.pending.hasChanges).toBe(false)
 
     const mockDeploy: RunWranglerDeploy = async () => ({
       exitCode: 0,

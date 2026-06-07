@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { describe, expect, it, vi } from "vitest"
 import { CloudflareAuthError, CloudflareClient } from "@monolith/cloudflare"
 import type { MonolithState } from "@monolith/core"
-import { resolveCloudDrift } from "./plan.js"
+import { resolveCloudActual, resolveCloudDrift } from "./plan.js"
 
 async function createPlanProject(): Promise<{ projectDir: string; state: MonolithState }> {
   const projectDir = join(tmpdir(), `monolith-plan-cloud-${Date.now()}-${Math.random()}`)
@@ -53,6 +53,70 @@ describe("resolveCloudDrift", () => {
 
     const drift = await resolveCloudDrift(state, projectDir, "on")
     expect(drift?.skippedReason).toContain("missing token")
+    createSpy.mockRestore()
+  })
+})
+
+describe("resolveCloudActual", () => {
+  it("computes drift from cloud actual vs desired when authed", async () => {
+    const { projectDir, state } = await createPlanProject()
+    const desired: MonolithState = {
+      ...state,
+      resources: [
+        ...state.resources,
+        {
+          id: "d1:DB",
+          kind: "d1",
+          binding: "DB",
+          name: "demo-db",
+          databaseId: "11111111-1111-1111-1111-111111111111"
+        }
+      ]
+    }
+
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes("/workers/scripts/demo-worker/settings")) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result: {
+              bindings: [
+                { name: "KV", type: "kv_namespace", namespace_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+                { name: "DB", type: "d1", id: "22222222-2222-2222-2222-222222222222" }
+              ]
+            }
+          }),
+          { status: 200 }
+        )
+      }
+      if (url.includes("/accounts")) {
+        return new Response(
+          JSON.stringify({ success: true, result: [{ id: "acct-1", name: "Example" }] }),
+          { status: 200 }
+        )
+      }
+      return new Response(JSON.stringify({ success: false, errors: [{ message: "not found" }] }), {
+        status: 404
+      })
+    })
+
+    const createSpy = vi.spyOn(CloudflareClient, "create").mockResolvedValue({
+      ok: true,
+      value: new CloudflareClient({
+        token: "test-token",
+        fetchImpl: fetchImpl as typeof fetch
+      })
+    })
+
+    const result = await resolveCloudActual(state, desired, projectDir, "on")
+    expect(result?.drift?.hasChanges).toBe(true)
+    expect(
+      result?.drift?.changes.some(
+        (change) => change.resource.id === "d1:DB" && change.fieldChanges?.some((f) => f.field === "databaseId")
+      )
+    ).toBe(true)
+
     createSpy.mockRestore()
   })
 })

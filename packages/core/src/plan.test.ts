@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatPlan, planState } from "./plan.js"
+import { formatCloudPlan, formatPlan, planState } from "./plan.js"
 import type { MonolithState } from "./state.js"
 
 const baseState = (resources: MonolithState["resources"]): MonolithState => ({
@@ -167,5 +167,43 @@ describe("planState", () => {
     const output = formatPlan("dev", state, result)
 
     expect(output).toContain("No changes. Infrastructure matches desired state.")
+  })
+
+  it("formats cloud plan with drift and pending sections", () => {
+    const actual = baseState([
+      { id: "worker:demo-worker", kind: "worker", name: "demo-worker" },
+      {
+        id: "kv:KV",
+        kind: "kv",
+        binding: "KV",
+        namespaceId: "cloud-id"
+      }
+    ])
+    const desired = baseState([
+      { id: "worker:demo-worker", kind: "worker", name: "demo-worker" },
+      {
+        id: "kv:KV",
+        kind: "kv",
+        binding: "KV",
+        namespaceId: "desired-id"
+      }
+    ])
+    const persisted = baseState([
+      { id: "worker:demo-worker", kind: "worker", name: "demo-worker" }
+    ])
+
+    const drift = planState(actual, desired)
+    const pending = planState(persisted, desired)
+
+    const output = formatCloudPlan("dev", "demo-worker", {
+      desiredSource: "wrangler",
+      drift,
+      pending
+    })
+
+    expect(output).toContain("Changes vs cloud (drift)")
+    expect(output).toContain("Changes vs last state")
+    expect(output).toContain("namespaceId: cloud-id → desired-id")
+    expect(output).toContain("+ create kv kv:KV")
   })
 })

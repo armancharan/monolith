@@ -135,7 +135,8 @@ queue = "jobs-queue"
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "ChatRoom", "script_name": "chat-do" }
-    ]
+    ],
+    "migrations": [{ "tag": "v1", "new_classes": ["ChatRoom"] }]
   }
 }
 `
@@ -145,6 +146,10 @@ queue = "jobs-queue"
     expect(result.durableObjects).toEqual([
       { binding: "ROOMS", className: "ChatRoom", scriptName: "chat-do" }
     ])
+    expect(result.durableObjectMigrations[0]).toMatchObject({
+      tag: "v1",
+      newClasses: ["ChatRoom"]
+    })
 
     const resources = toStackResources(result)
     expect(resources.durableObjects).toEqual([

@@ -1,5 +1,11 @@
 import { isPreviewStage, loadState, previewWorkerName, saveState, type MonolithState } from "@monolith/core"
-import { writePreviewWranglerConfig } from "@monolith/cloudflare"
+import {
+  deployWithDoMigration,
+  detectDoMigrations,
+  parseWranglerConfigText,
+  writePreviewWranglerConfig
+} from "@monolith/cloudflare"
+import { readFile } from "node:fs/promises"
 import { spawn } from "node:child_process"
 import { constants } from "node:fs"
 import { access } from "node:fs/promises"
@@ -166,8 +172,16 @@ export async function runDeploy(
       return planEval.exitCode
     }
 
-    if (planEval.value.plan.hasChanges) {
-      console.error(`Plan has pending changes for stage "${stage}".`)
+    const hasPending = planEval.value.pending.hasChanges
+    const hasDrift = planEval.value.cloud?.drift?.hasChanges ?? false
+
+    if (hasPending || hasDrift) {
+      if (hasPending) {
+        console.error(`Plan has pending changes for stage "${stage}" (local state vs desired).`)
+      }
+      if (hasDrift) {
+        console.error(`Cloud drift detected for stage "${stage}" (cloud vs desired).`)
+      }
       console.error("Review with `monolith plan --stage " + stage + "` or deploy with --auto-approve.")
       return 1
     }
@@ -175,6 +189,16 @@ export async function runDeploy(
 
   const deployConfig = await resolveDeployConfigPath(current, stage, projectDir)
   const configPath = deployConfig.configPath
+
+  let parsedConfig
+  if (configPath) {
+    try {
+      const content = await readFile(join(projectDir, configPath), "utf8")
+      parsedConfig = parseWranglerConfigText(content, configPath)
+    } catch {
+      parsedConfig = undefined
+    }
+  }
 
   console.log(`Deploying stage "${stage}" via wrangler...`)
   if (configPath) {
@@ -187,7 +211,19 @@ export async function runDeploy(
     )
   }
 
-  const result = await deploy(projectDir, configPath)
+  if (parsedConfig) {
+    const migration = detectDoMigrations(parsedConfig)
+    if (migration.requiresTwoStepDeploy) {
+      console.log(
+        `  DO migration detected (${migration.migrationTags.join(", ") || "untagged"}) — two-step deploy`
+      )
+    }
+  }
+
+  const result =
+    parsedConfig
+      ? await deployWithDoMigration(projectDir, configPath, deploy, parsedConfig)
+      : await deploy(projectDir, configPath)
   if (result.exitCode !== 0) {
     console.error(`Deploy failed: wrangler exited with code ${result.exitCode}`)
     return result.exitCode

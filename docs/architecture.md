@@ -53,11 +53,26 @@ flowchart LR
 
 ### Plan diff
 
-`@monolith/core` compares desired resources to `.monolith/state/<stage>.json` and emits create/update/delete/no-op changes. First run after import typically shows creates or updates.
+`@monolith/core` compares resources and emits create/update/delete changes.
+
+**Phase A (reconcile):** when Cloudflare credentials are available (or `--cloud` is passed), `monolith plan` reads **cloud actual** via the Workers Settings API and shows two sections:
+
+| Section | Compares | Meaning |
+| --- | --- | --- |
+| Changes vs cloud (drift) | cloud actual → desired | Dashboard edits or external deploys not reflected in wrangler |
+| Changes vs last state | local state → desired | Pending apply since last `monolith deploy` |
+
+Use `--local-only` to revert to state-vs-desired only (pre-Phase A behavior).
+
+Cloud read endpoint: `GET /accounts/{account_id}/workers/scripts/{script_name}/settings` (bindings → `StateResource[]` with IDs like `d1:DB`, `kv:KV`).
 
 ### Apply (deploy)
 
 `monolith deploy` invokes wrangler as a subprocess. On success, state is updated with `deployedAt` and `workerUrl` parsed from wrangler output.
+
+Deploy blocks when **either** local pending changes **or** cloud drift exist, unless `--auto-approve`.
+
+**Durable Object migrations:** when wrangler declares `new_classes` / `new_sqlite_classes` migration tags alongside DO bindings, deploy runs wrangler **twice** (Cloudflare two-step migration requirement).
 
 Preview stages (`pr-*`) write `.monolith/wrangler.<stage>.jsonc` with Worker name suffix before deploy.
 

@@ -40,6 +40,14 @@ export interface WranglerDurableObject {
   scriptName?: string
 }
 
+export interface WranglerDurableObjectMigration {
+  tag: string
+  newClasses?: string[]
+  newSqliteClasses?: string[]
+  renamedClasses?: Array<{ from: string; to: string }>
+  deletedClasses?: string[]
+}
+
 export interface WranglerImportResult {
   sourcePath: string
   configBasename: string
@@ -51,6 +59,7 @@ export interface WranglerImportResult {
   queues: WranglerQueue[]
   r2Buckets: WranglerR2Bucket[]
   durableObjects: WranglerDurableObject[]
+  durableObjectMigrations: WranglerDurableObjectMigration[]
 }
 
 export interface WranglerImportSnapshot extends Omit<WranglerImportResult, "sourcePath"> {
@@ -103,6 +112,13 @@ interface RawWranglerConfig {
       name?: string
       class_name?: string
       script_name?: string
+    }>
+    migrations?: Array<{
+      tag?: string
+      new_classes?: string[]
+      new_sqlite_classes?: string[]
+      renamed_classes?: Array<{ from?: string; to?: string }>
+      deleted_classes?: string[]
     }>
   }
 }
@@ -198,6 +214,34 @@ function normalizeDurableObjects(
   })
 }
 
+function normalizeDurableObjectMigrations(
+  raw: RawWranglerConfig["durable_objects"]
+): WranglerDurableObjectMigration[] {
+  return (raw?.migrations ?? []).flatMap((entry) => {
+    const tag = entry.tag?.trim()
+    if (!tag) {
+      return []
+    }
+
+    const renamedClasses = (entry.renamed_classes ?? []).flatMap((rename) => {
+      const from = rename.from?.trim()
+      const to = rename.to?.trim()
+      if (!from || !to) {
+        return []
+      }
+      return [{ from, to }]
+    })
+
+    return [{
+      tag,
+      newClasses: (entry.new_classes ?? []).map((value) => value.trim()).filter(Boolean),
+      newSqliteClasses: (entry.new_sqlite_classes ?? []).map((value) => value.trim()).filter(Boolean),
+      renamedClasses: renamedClasses.length > 0 ? renamedClasses : undefined,
+      deletedClasses: (entry.deleted_classes ?? []).map((value) => value.trim()).filter(Boolean)
+    }]
+  })
+}
+
 function normalizeConfig(
   raw: RawWranglerConfig,
   sourcePath: string,
@@ -246,7 +290,8 @@ function normalizeConfig(
     kvNamespaces,
     queues: normalizeQueues(raw.queues),
     r2Buckets,
-    durableObjects: normalizeDurableObjects(raw.durable_objects)
+    durableObjects: normalizeDurableObjects(raw.durable_objects),
+    durableObjectMigrations: normalizeDurableObjectMigrations(raw.durable_objects)
   }
 }
 

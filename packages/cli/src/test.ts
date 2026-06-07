@@ -120,7 +120,7 @@ export async function runTest(args: string[], options?: TestHarnessOptions): Pro
     return planEval.exitCode
   }
 
-  if (planEval.value.plan.hasChanges) {
+  if (planEval.value.pending.hasChanges) {
     console.log(`Plan has pending changes for stage "${stage}" — proceeding with deploy (--auto-approve).`)
   } else {
     console.log(`Plan clean for stage "${stage}".`)

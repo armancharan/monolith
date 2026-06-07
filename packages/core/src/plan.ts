@@ -140,6 +140,83 @@ function formatFieldChange(change: FieldChange): string {
   return `${change.field}: ${from} → ${to}`
 }
 
+export function formatPlanSection(title: string, result: PlanResult): string[] {
+  const lines: string[] = ["", title]
+
+  if (!result.hasChanges) {
+    lines.push("  No changes.")
+    return lines
+  }
+
+  for (const change of result.changes) {
+    const prefix =
+      change.type === "create" ? "+" : change.type === "update" ? "~" : "-"
+    const label = change.type === "create" ? "create" : change.type === "update" ? "update" : "delete"
+    lines.push(`  ${prefix} ${label} ${describeResource(change.resource)}`)
+
+    if (change.bindingChange) {
+      lines.push("      [binding change]")
+    }
+
+    for (const fieldChange of change.fieldChanges ?? []) {
+      const marker = fieldChange.field === "binding" ? "      * " : "      "
+      lines.push(`${marker}${formatFieldChange(fieldChange)}`)
+    }
+  }
+
+  return lines
+}
+
+export interface CloudPlanSections {
+  desiredSource: PlanDesiredSource
+  drift?: PlanResult
+  pending?: PlanResult
+  cloudSkippedReason?: string
+}
+
+export function formatCloudPlan(
+  stage: string,
+  stackName: string,
+  sections: CloudPlanSections
+): string {
+  const desiredLabel =
+    sections.desiredSource === "stack"
+      ? "monolith.run.ts (merged with import/wrangler IDs)"
+      : sections.desiredSource === "wrangler"
+        ? "wrangler config (re-import)"
+        : "import snapshot"
+
+  const lines = [
+    `Plan for stage "${stage}" (stack: ${stackName})`,
+    `Desired source: ${desiredLabel}`
+  ]
+
+  if (sections.cloudSkippedReason) {
+    lines.push("")
+    lines.push("Changes vs cloud (drift)")
+    lines.push(`  Skipped: ${sections.cloudSkippedReason}`)
+  } else if (sections.drift) {
+    lines.push(...formatPlanSection("Changes vs cloud (drift)", sections.drift))
+  }
+
+  if (sections.pending) {
+    lines.push(...formatPlanSection("Changes vs last state", sections.pending))
+  }
+
+  const hasDrift = sections.drift?.hasChanges ?? false
+  const hasPending = sections.pending?.hasChanges ?? false
+
+  if (!sections.cloudSkippedReason && !sections.drift && !sections.pending) {
+    lines.push("")
+    lines.push("No changes. Infrastructure matches desired state.")
+  } else if (!hasDrift && !hasPending && !sections.cloudSkippedReason) {
+    lines.push("")
+    lines.push("No changes. Cloud and local state match desired configuration.")
+  }
+
+  return lines.join("\n")
+}
+
 export function formatPlan(
   stage: string,
   current: MonolithState,
@@ -162,24 +239,7 @@ export function formatPlan(
     return lines.join("\n")
   }
 
-  lines.push("")
-  lines.push("Changes:")
-
-  for (const change of result.changes) {
-    const prefix =
-      change.type === "create" ? "+" : change.type === "update" ? "~" : "-"
-    const label = change.type === "create" ? "create" : change.type === "update" ? "update" : "delete"
-    lines.push(`  ${prefix} ${label} ${describeResource(change.resource)}`)
-
-    if (change.bindingChange) {
-      lines.push("      [binding change]")
-    }
-
-    for (const fieldChange of change.fieldChanges ?? []) {
-      const marker = fieldChange.field === "binding" ? "      * " : "      "
-      lines.push(`${marker}${formatFieldChange(fieldChange)}`)
-    }
-  }
+  lines.push(...formatPlanSection("Changes:", result))
 
   return lines.join("\n")
 }

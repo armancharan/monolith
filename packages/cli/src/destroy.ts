@@ -159,7 +159,7 @@ export async function runDestroy(
   console.log(`Destroy plan for stage "${stage}":`)
   const evaluated = await evaluatePlan(stage, projectDir)
   if (evaluated.ok) {
-    console.log(formatPlan(stage, evaluated.value.current, evaluated.value.plan))
+    console.log(formatPlan(stage, evaluated.value.current, evaluated.value.pending))
   } else {
     console.log(`  (plan skipped: ${evaluated.message})`)
   }

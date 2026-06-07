@@ -102,6 +102,155 @@ function bindingResourceId(binding: RawCloudBinding): string | undefined {
   )
 }
 
+export function bindingsToStateResources(
+  workerName: string,
+  bindings: RawCloudBinding[] | undefined
+): StateResource[] {
+  const resources: StateResource[] = [
+    {
+      id: `worker:${workerName}`,
+      kind: "worker",
+      name: workerName
+    }
+  ]
+
+  for (const binding of bindings ?? []) {
+    const name = binding.name?.trim()
+    const type = binding.type?.trim()
+    if (!name || !type) {
+      continue
+    }
+
+    switch (type) {
+      case "d1": {
+        const databaseId = binding.id?.trim()
+        if (!databaseId) {
+          break
+        }
+        resources.push({
+          id: `d1:${name}`,
+          kind: "d1",
+          binding: name,
+          name,
+          databaseId
+        })
+        break
+      }
+      case "kv_namespace": {
+        const namespaceId = binding.namespace_id?.trim() ?? binding.id?.trim()
+        if (!namespaceId) {
+          break
+        }
+        resources.push({
+          id: `kv:${name}`,
+          kind: "kv",
+          binding: name,
+          namespaceId
+        })
+        break
+      }
+      case "r2_bucket": {
+        const bucketName = binding.bucket_name?.trim()
+        resources.push({
+          id: `r2:${name}`,
+          kind: "r2",
+          binding: name,
+          bucketName
+        })
+        break
+      }
+      case "queue": {
+        const queueName = binding.queue_name?.trim()
+        resources.push({
+          id: `queue:${name}`,
+          kind: "queue",
+          binding: name,
+          name: queueName ?? name
+        })
+        break
+      }
+      case "durable_object_namespace": {
+        const className = binding.class_name?.trim()
+        if (!className) {
+          break
+        }
+        resources.push({
+          id: `durable_object:${name}`,
+          kind: "durable_object",
+          binding: name,
+          name: className,
+          className,
+          scriptName: binding.script_name?.trim()
+        })
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  return resources
+}
+
+export async function readActualWorker(
+  client: CloudflareClient,
+  accountId: string,
+  workerName: string
+): Promise<Result<StateResource[], CloudflareApiError>> {
+  const settingsResult = await readWorkerSettingsFromApi(client, accountId, workerName)
+  if (!settingsResult.ok) {
+    return settingsResult
+  }
+
+  return ok(bindingsToStateResources(workerName, settingsResult.value.bindings))
+}
+
+export interface ReadActualStackOptions {
+  state: MonolithState
+  projectDir: string
+  accountId?: string
+  client?: CloudflareClient
+}
+
+export async function readActualStack(
+  options: ReadActualStackOptions
+): Promise<Result<MonolithState, CloudflareAuthError | CloudflareApiError | string>> {
+  const workerName = workerNameFromState(options.state)
+  if (!workerName) {
+    return err("State has no worker name to read from cloud")
+  }
+
+  let client = options.client
+  if (!client) {
+    const clientResult = await CloudflareClient.create({ projectDir: options.projectDir })
+    if (!clientResult.ok) {
+      return clientResult
+    }
+    client = clientResult.value
+  }
+
+  let accountId = options.accountId
+  if (!accountId) {
+    const accountResult = await client.getAccountId()
+    if (!accountResult.ok) {
+      return accountResult
+    }
+    accountId = accountResult.value
+  }
+
+  const resourcesResult = await readActualWorker(client, accountId, workerName)
+  if (!resourcesResult.ok) {
+    return resourcesResult
+  }
+
+  return ok({
+    stackName: options.state.stackName,
+    stage: options.state.stage,
+    resources: resourcesResult.value,
+    updatedAt: new Date().toISOString()
+  })
+}
+
 function normalizeCloudBindings(bindings: RawCloudBinding[] | undefined): CloudBindingHint[] {
   if (!bindings) {
     return []
