@@ -59,12 +59,13 @@ Usage:
   monolith whoami [--account-id]
   monolith plan --stage <name>
   monolith typegen --stage <name>
-  monolith deploy [--stage <name>]
+  monolith deploy [--stage <name>] [--auto-approve]
   monolith destroy [--stage <name>]
 
 import reads wrangler config and writes .monolith/import/<hash>.json.
 Pass --stage on import to seed .monolith/state/<stage>.json from the snapshot.
 import and plan also emit src/monolith.env.d.ts (or beside worker main) with MonolithEnv.
 deploy runs \`npx wrangler deploy\` in the project directory (default stage: dev).
+deploy checks plan first; pass --auto-approve to skip when changes are pending.
 destroy is an M1 stub — full teardown deferred post-M1.`)
 }

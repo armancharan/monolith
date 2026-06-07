@@ -15,10 +15,12 @@ export interface PlanChange {
   bindingChange?: boolean
 }
 
+export type PlanDesiredSource = "stack" | "wrangler" | "import"
+
 export interface PlanResult {
   hasChanges: boolean
   changes: PlanChange[]
-  desiredSource: "wrangler" | "import"
+  desiredSource: PlanDesiredSource
 }
 
 const BINDING_KINDS = new Set(["d1", "kv", "r2", "queue"])
@@ -144,7 +146,13 @@ export function formatPlan(
 ): string {
   const lines = [
     `Plan for stage "${stage}" (stack: ${current.stackName})`,
-    `Desired source: ${result.desiredSource === "wrangler" ? "wrangler config (re-import)" : "import snapshot"}`
+    `Desired source: ${
+      result.desiredSource === "stack"
+        ? "monolith.run.ts (merged with import/wrangler IDs)"
+        : result.desiredSource === "wrangler"
+          ? "wrangler config (re-import)"
+          : "import snapshot"
+    }`
   ]
 
   if (!result.hasChanges) {

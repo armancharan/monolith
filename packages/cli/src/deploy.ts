@@ -3,12 +3,14 @@ import { spawn } from "node:child_process"
 import { constants } from "node:fs"
 import { access } from "node:fs/promises"
 import { join } from "node:path"
+import { evaluatePlan } from "./plan.js"
 
 const DEFAULT_STAGE = "dev"
 const WRANGLER_CONFIG_CANDIDATES = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
 
 export interface DeployArgs {
   stage: string
+  autoApprove: boolean
 }
 
 export interface WranglerDeployResult {
@@ -22,13 +24,17 @@ export type RunWranglerDeploy = (
 ) => Promise<WranglerDeployResult>
 
 function parseArgs(args: string[]): DeployArgs {
-  const parsed: DeployArgs = { stage: DEFAULT_STAGE }
+  const parsed: DeployArgs = { stage: DEFAULT_STAGE, autoApprove: false }
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === "--stage" && args[index + 1]) {
       parsed.stage = args[index + 1]
       index += 1
+      continue
+    }
+    if (arg === "--auto-approve") {
+      parsed.autoApprove = true
     }
   }
 
@@ -113,7 +119,7 @@ export async function runDeploy(
   args: string[],
   options?: { runWrangler?: RunWranglerDeploy; projectDir?: string }
 ): Promise<number> {
-  const { stage } = parseArgs(args)
+  const { stage, autoApprove } = parseArgs(args)
   const projectDir = options?.projectDir ?? process.cwd()
   const deploy = options?.runWrangler ?? runWranglerDeploy
 
@@ -125,6 +131,21 @@ export async function runDeploy(
   }
 
   const current = stateResult.value
+
+  if (!autoApprove) {
+    const planEval = await evaluatePlan(stage, projectDir)
+    if (!planEval.ok) {
+      console.error(planEval.message)
+      return planEval.exitCode
+    }
+
+    if (planEval.value.plan.hasChanges) {
+      console.error(`Plan has pending changes for stage "${stage}".`)
+      console.error("Review with `monolith plan --stage " + stage + "` or deploy with --auto-approve.")
+      return 1
+    }
+  }
+
   const configPath = await resolveWranglerConfigPath(current, projectDir)
 
   console.log(`Deploying stage "${stage}" via wrangler...`)

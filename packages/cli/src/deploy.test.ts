@@ -38,7 +38,10 @@ describe("runDeploy", () => {
     tempDirs.push(projectDir)
     await mkdir(join(projectDir, ".monolith", "state"), { recursive: true })
     await writeFile(join(projectDir, ".monolith", "state", "dev.json"), `${JSON.stringify(state, null, 2)}\n`)
-    await writeFile(join(projectDir, "wrangler.jsonc"), "{}\n")
+    await writeFile(
+      join(projectDir, "wrangler.jsonc"),
+      `{ "name": "demo-worker", "main": "src/index.ts" }\n`
+    )
     return projectDir
   }
 
@@ -60,7 +63,7 @@ describe("runDeploy", () => {
       }
     }
 
-    const code = await runDeploy(["--stage", "dev"], {
+    const code = await runDeploy(["--stage", "dev", "--auto-approve"], {
       projectDir,
       runWrangler: mockDeploy
     })
@@ -78,7 +81,8 @@ describe("runDeploy", () => {
       stackName: "demo-worker",
       stage: "dev",
       resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
-      updatedAt: "2026-01-01T00:00:00.000Z"
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      wranglerConfigPath: "wrangler.jsonc"
     })
 
     const mockDeploy: RunWranglerDeploy = async () => ({
@@ -86,7 +90,7 @@ describe("runDeploy", () => {
       output: "Authentication error\n"
     })
 
-    const code = await runDeploy(["--stage", "dev"], {
+    const code = await runDeploy(["--stage", "dev", "--auto-approve"], {
       projectDir,
       runWrangler: mockDeploy
     })
@@ -96,5 +100,62 @@ describe("runDeploy", () => {
     const saved = JSON.parse(await readFile(join(projectDir, ".monolith", "state", "dev.json"), "utf8"))
     expect(saved.deployedAt).toBeUndefined()
     expect(saved.workerUrl).toBeUndefined()
+  })
+
+  it("blocks deploy when plan has pending changes without --auto-approve", async () => {
+    const projectDir = await makeProject({
+      stackName: "demo-worker",
+      stage: "dev",
+      resources: [
+        { id: "worker:demo-worker", kind: "worker", name: "demo-worker" },
+        { id: "kv:KV", kind: "kv", binding: "KV", namespaceId: "old-id" }
+      ],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      wranglerConfigPath: "wrangler.jsonc"
+    })
+
+    await writeFile(
+      join(projectDir, "wrangler.jsonc"),
+      `{
+  "name": "demo-worker",
+  "main": "src/index.ts",
+  "kv_namespaces": [{ "binding": "KV", "id": "new-id" }]
+}
+`
+    )
+
+    const mockDeploy: RunWranglerDeploy = async () => ({
+      exitCode: 0,
+      output: "should not run\n"
+    })
+
+    const code = await runDeploy(["--stage", "dev"], {
+      projectDir,
+      runWrangler: mockDeploy
+    })
+
+    expect(code).toBe(1)
+  })
+
+  it("allows deploy when plan is clean", async () => {
+    const projectDir = await makeProject({
+      stackName: "demo-worker",
+      stage: "dev",
+      resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      wranglerConfigPath: "wrangler.jsonc"
+    })
+
+    const mockDeploy: RunWranglerDeploy = async () => ({
+      exitCode: 0,
+      output: "Deployed https://demo-worker.example.workers.dev\n"
+    })
+
+    const code = await runDeploy(["--stage", "dev"], {
+      projectDir,
+      runWrangler: mockDeploy
+    })
+
+    expect(code).toBe(0)
   })
 })

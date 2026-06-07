@@ -5,7 +5,8 @@ import {
   planState,
   stateFromImportSnapshot,
   type ImportSnapshot,
-  type MonolithState
+  type MonolithState,
+  type PlanResult
 } from "@monolith/core"
 import {
   hashWranglerContent,
@@ -16,6 +17,9 @@ import {
 import { readFile, readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { emitTypegenFromImport } from "./typegen.js"
+import { loadDesiredFromStackFile, stackFileExists } from "./stack-file.js"
+
+export type DesiredSource = "stack" | "wrangler" | "import"
 
 function parseArgs(args: string[]): { stage?: string } {
   const parsed: { stage?: string } = {}
@@ -72,30 +76,31 @@ async function latestImportSnapshot(projectDir: string): Promise<string | undefi
   return latestPath
 }
 
-async function resolveDesiredState(
+async function snapshotFromWrangler(
   current: MonolithState,
   projectDir: string
-): Promise<{ state: MonolithState; source: "wrangler" | "import" } | undefined> {
-  if (current.wranglerConfigPath) {
-    const configPath = join(projectDir, current.wranglerConfigPath)
-    try {
-      const content = await readFile(configPath, "utf8")
-      const parsed = parseWranglerConfigText(content, configPath)
-      const snapshot = toImportSnapshot(parsed, hashWranglerContent(content))
-      return {
-        state: stateFromImportSnapshot(snapshot, current.stage, {
-          importSnapshotPath: current.importSnapshotPath,
-          wranglerConfigPath: current.wranglerConfigPath
-        }),
-        source: "wrangler"
-      }
-    } catch (error) {
-      if (!(error instanceof WranglerParseError)) {
-        throw error
-      }
-    }
+): Promise<ImportSnapshot | undefined> {
+  if (!current.wranglerConfigPath) {
+    return undefined
   }
 
+  const configPath = join(projectDir, current.wranglerConfigPath)
+  try {
+    const content = await readFile(configPath, "utf8")
+    const parsed = parseWranglerConfigText(content, configPath)
+    return toImportSnapshot(parsed, hashWranglerContent(content))
+  } catch (error) {
+    if (!(error instanceof WranglerParseError)) {
+      throw error
+    }
+    return undefined
+  }
+}
+
+async function snapshotFromImport(
+  current: MonolithState,
+  projectDir: string
+): Promise<{ snapshot: ImportSnapshot; path: string } | undefined> {
   const importCandidates = [
     current.importSnapshotPath,
     current.importHash ? `${IMPORT_DIR}/${current.importHash}.json` : undefined,
@@ -105,51 +110,123 @@ async function resolveDesiredState(
   for (const importPath of importCandidates) {
     const snapshot = await readImportSnapshot(importPath, projectDir)
     if (snapshot) {
-      return {
-        state: stateFromImportSnapshot(snapshot, current.stage, {
-          importSnapshotPath: importPath,
-          wranglerConfigPath: current.wranglerConfigPath
-        }),
-        source: "import"
-      }
+      return { snapshot, path: importPath }
     }
   }
 
   return undefined
 }
 
-export async function runPlan(args: string[]): Promise<number> {
+/**
+ * Resolve desired state for plan/deploy.
+ *
+ * Precedence:
+ * 1. monolith.run.ts merged with wrangler/import snapshot (when run file + base snapshot exist)
+ * 2. wrangler config re-parse
+ * 3. import snapshot
+ */
+export async function resolveDesiredState(
+  current: MonolithState,
+  projectDir: string
+): Promise<{ state: MonolithState; source: DesiredSource } | undefined> {
+  const wranglerSnapshot = await snapshotFromWrangler(current, projectDir)
+  const importResult = await snapshotFromImport(current, projectDir)
+  const baseSnapshot = wranglerSnapshot ?? importResult?.snapshot
+
+  if (baseSnapshot && (await stackFileExists(projectDir))) {
+    const stackState = await loadDesiredFromStackFile(projectDir, current, baseSnapshot)
+    if (stackState) {
+      return { state: stackState, source: "stack" }
+    }
+  }
+
+  if (wranglerSnapshot && current.wranglerConfigPath) {
+    return {
+      state: stateFromImportSnapshot(wranglerSnapshot, current.stage, {
+        importSnapshotPath: current.importSnapshotPath,
+        wranglerConfigPath: current.wranglerConfigPath
+      }),
+      source: "wrangler"
+    }
+  }
+
+  if (importResult) {
+    return {
+      state: stateFromImportSnapshot(importResult.snapshot, current.stage, {
+        importSnapshotPath: importResult.path,
+        wranglerConfigPath: current.wranglerConfigPath
+      }),
+      source: "import"
+    }
+  }
+
+  return undefined
+}
+
+export interface EvaluatePlanResult {
+  current: MonolithState
+  plan: PlanResult
+}
+
+export async function evaluatePlan(
+  stage: string,
+  projectDir: string
+): Promise<
+  | { ok: true; value: EvaluatePlanResult }
+  | { ok: false; exitCode: number; message: string }
+> {
+  const stateResult = await loadState(stage, projectDir)
+  if (!stateResult.ok) {
+    return {
+      ok: false,
+      exitCode: 1,
+      message: stateResult.error.message
+    }
+  }
+
+  const current = stateResult.value
+  let desiredResult: { state: MonolithState; source: DesiredSource }
+  try {
+    const resolved = await resolveDesiredState(current, projectDir)
+    if (!resolved) {
+      return {
+        ok: false,
+        exitCode: 1,
+        message: "Could not resolve desired state from monolith.run.ts, wrangler config, or import snapshot."
+      }
+    }
+    desiredResult = resolved
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, exitCode: 1, message }
+  }
+
+  const plan = planState(current, desiredResult.state)
+  plan.desiredSource = desiredResult.source
+  return { ok: true, value: { current, plan } }
+}
+
+export async function runPlan(
+  args: string[],
+  options?: { projectDir?: string }
+): Promise<number> {
   const { stage } = parseArgs(args)
   if (!stage) {
     console.error("Usage: monolith plan --stage <name>")
     return 1
   }
 
-  const projectDir = process.cwd()
-  const stateResult = await loadState(stage, projectDir)
-  if (!stateResult.ok) {
-    console.error(stateResult.error.message)
-    console.error("Run `monolith import ... --stage <name>` or `monolith state init` first.")
-    return 1
-  }
-
-  const current = stateResult.value
-  let desiredResult: { state: MonolithState; source: "wrangler" | "import" }
-  try {
-    const resolved = await resolveDesiredState(current, projectDir)
-    if (!resolved) {
-      console.error("Could not resolve desired state from wrangler config or import snapshot.")
-      return 1
+  const projectDir = options?.projectDir ?? process.cwd()
+  const evaluated = await evaluatePlan(stage, projectDir)
+  if (!evaluated.ok) {
+    console.error(evaluated.message)
+    if (evaluated.message.includes("State file not found")) {
+      console.error("Run `monolith import ... --stage <name>` or `monolith state init` first.")
     }
-    desiredResult = resolved
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(message)
-    return 1
+    return evaluated.exitCode
   }
 
-  const plan = planState(current, desiredResult.state)
-  plan.desiredSource = desiredResult.source
+  const { current, plan } = evaluated.value
   console.log(formatPlan(stage, current, plan))
 
   if (current.wranglerConfigPath) {

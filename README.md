@@ -3,15 +3,17 @@
 TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony or Effect lock-in. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `monolith.run.ts`, get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production.
 
 **Portfolio id:** Perch (experiment) · **M1 codename:** Monolith  
-**Status:** C0 scaffold — packages compile; CLI commands stubbed  
+**Status:** C1–C8 landed — import, state, plan, deploy (wrangler delegate), typegen; init/destroy stubs remain  
 **Positioning:** B2D / agency devtools — reputation-first validation, not Vercel-adjacent hosting or Canva-style creative tooling.
 
-## Quick start (C0)
+## Quick start
 
 ```bash
 pnpm install
 pnpm build
 pnpm typecheck
+pnpm test
+pnpm test:integration   # fixture CLI flows, no network
 pnpm monolith --help
 ```
 
@@ -19,13 +21,34 @@ Requires **Node 24+** (see `.nvmrc`).
 
 | Package | Role |
 | --- | --- |
-| `@monolith/core` | Stack types, `.monolith/state/<stage>.json` path helpers |
-| `@monolith/cloudflare` | CF `stack()` helper, Worker/D1/R2/KV placeholder types |
-| `@monolith/cli` | `monolith` bin — `init`, `import`, `plan`, `deploy` stubbed |
+| `@monolith/core` | Stack types, plan diff, `.monolith/state/<stage>.json` |
+| `@monolith/cloudflare` | CF `stack()` helper, wrangler import, auth client |
+| `@monolith/cli` | `monolith` bin — import, plan, deploy, typegen, whoami |
 
-Example stack shell: [`monolith.run.ts`](./monolith.run.ts) at repo root.
+Example stack: [`monolith.run.ts`](./monolith.run.ts) at repo root.
 
-## Milestone 1 (current)
+### Typical flow
+
+```bash
+monolith import wrangler.jsonc --stage dev
+monolith plan --stage dev          # desired: monolith.run.ts + wrangler IDs when run file exists
+monolith deploy --stage dev        # blocks if plan has changes
+monolith deploy --stage dev --auto-approve
+```
+
+Plan prefers **`monolith.run.ts` binding declarations** merged with wrangler/import resource IDs when the run file is present; otherwise wrangler re-parse or import snapshot.
+
+## Test pyramid
+
+| Layer | Command | What it covers |
+| --- | --- | --- |
+| Unit / component | `pnpm test` | Plan engine, wrangler parse, auth, mocked deploy |
+| Fixture integration | `pnpm test:integration` | import → plan → deploy on dogfood wrangler fixture |
+| Live-cloud smoke | *(deferred)* | Real CF account behind `MONOLITH_LIVE_TESTS=1` |
+
+See [docs/audit-2026-06-07.md](./docs/audit-2026-06-07.md) for coverage matrix and reconcile roadmap.
+
+## Milestone 1
 
 **M1-GITHUB-DOGFOOD** — import → plan → deploy → typed bindings on one small GitHub-hosted Worker app (design partner #1 = self).
 
@@ -55,13 +78,13 @@ gh auth login
 
 See [docs/milestone-1.md](./docs/milestone-1.md#dogfood-repo-github) for `gh repo create`, clone, and Wrangler baseline deploy.
 
-
 ## Docs
 
 | Doc | Purpose |
 | --- | --- |
 | [docs/product-spec.md](./docs/product-spec.md) | Canonical product spec (DVI, competitive, GTM, M1 DAGs) |
 | [docs/milestone-1.md](./docs/milestone-1.md) | M1 working doc — verification checklist + friction log |
+| [docs/audit-2026-06-07.md](./docs/audit-2026-06-07.md) | Strategic/technical audit summary + test pyramid |
 
 ## Portfolio
 
