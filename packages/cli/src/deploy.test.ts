@@ -33,11 +33,11 @@ describe("runDeploy", () => {
     await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
-  async function makeProject(state: Record<string, unknown>): Promise<string> {
+  async function makeProject(stage: string, state: Record<string, unknown>): Promise<string> {
     const projectDir = join(tmpdir(), `monolith-deploy-test-${Date.now()}-${Math.random()}`)
     tempDirs.push(projectDir)
     await mkdir(join(projectDir, ".monolith", "state"), { recursive: true })
-    await writeFile(join(projectDir, ".monolith", "state", "dev.json"), `${JSON.stringify(state, null, 2)}\n`)
+    await writeFile(join(projectDir, ".monolith", "state", `${stage}.json`), `${JSON.stringify(state, null, 2)}\n`)
     await writeFile(
       join(projectDir, "wrangler.jsonc"),
       `{ "name": "demo-worker", "main": "src/index.ts" }\n`
@@ -46,7 +46,7 @@ describe("runDeploy", () => {
   }
 
   it("updates state with deploy metadata after successful wrangler deploy", async () => {
-    const projectDir = await makeProject({
+    const projectDir = await makeProject("dev", {
       stackName: "demo-worker",
       stage: "dev",
       resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
@@ -77,7 +77,7 @@ describe("runDeploy", () => {
   })
 
   it("returns wrangler exit code on deploy failure", async () => {
-    const projectDir = await makeProject({
+    const projectDir = await makeProject("dev", {
       stackName: "demo-worker",
       stage: "dev",
       resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
@@ -103,7 +103,7 @@ describe("runDeploy", () => {
   })
 
   it("blocks deploy when plan has pending changes without --auto-approve", async () => {
-    const projectDir = await makeProject({
+    const projectDir = await makeProject("dev", {
       stackName: "demo-worker",
       stage: "dev",
       resources: [
@@ -138,7 +138,7 @@ describe("runDeploy", () => {
   })
 
   it("allows deploy when plan is clean", async () => {
-    const projectDir = await makeProject({
+    const projectDir = await makeProject("dev", {
       stackName: "demo-worker",
       stage: "dev",
       resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
@@ -157,5 +157,36 @@ describe("runDeploy", () => {
     })
 
     expect(code).toBe(0)
+  })
+
+  it("uses preview worker suffix and temp config for pr-* stages", async () => {
+    const projectDir = await makeProject("pr-123", {
+      stackName: "demo-worker",
+      stage: "pr-123",
+      resources: [{ id: "worker:demo-worker", kind: "worker", name: "demo-worker" }],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      wranglerConfigPath: "wrangler.jsonc"
+    })
+
+    const mockDeploy: RunWranglerDeploy = async (cwd, configPath) => {
+      expect(cwd).toBe(projectDir)
+      expect(configPath).toBe(".monolith/wrangler.pr-123.jsonc")
+      return {
+        exitCode: 0,
+        output: "Deployed https://demo-worker-pr-123.example.workers.dev\n"
+      }
+    }
+
+    const code = await runDeploy(["--stage", "pr-123", "--auto-approve"], {
+      projectDir,
+      runWrangler: mockDeploy
+    })
+
+    expect(code).toBe(0)
+
+    const previewConfig = JSON.parse(
+      await readFile(join(projectDir, ".monolith", "wrangler.pr-123.jsonc"), "utf8")
+    )
+    expect(previewConfig.name).toBe("demo-worker-pr-123")
   })
 })

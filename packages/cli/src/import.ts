@@ -11,22 +11,23 @@ import { mkdir, readFile, writeFile, access } from "node:fs/promises"
 import { constants } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { emitTypegenFromImport } from "./typegen.js"
+import { parseStageArgs, requireStage } from "./stage.js"
 
 const RUN_FILE = "monolith.run.ts"
 
 function parseImportArgs(args: string[]): {
   configArg?: string
   stage?: string
+  preview: boolean
 } {
-  const parsed: { configArg?: string; stage?: string } = {}
+  const stageParsed = parseStageArgs(args)
+  const parsed: { configArg?: string; stage?: string; preview: boolean } = {
+    stage: stageParsed.stage,
+    preview: stageParsed.preview
+  }
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
-    if (arg === "--stage" && args[index + 1]) {
-      parsed.stage = args[index + 1]
-      index += 1
-      continue
-    }
     if (!arg.startsWith("-") && !parsed.configArg) {
       parsed.configArg = arg
     }
@@ -36,11 +37,23 @@ function parseImportArgs(args: string[]): {
 }
 
 export async function runImport(args: string[]): Promise<number> {
-  const { configArg, stage } = parseImportArgs(args)
+  const stageParsed = parseStageArgs(args)
+  const stage = stageParsed.preview
+    ? requireStage(
+        stageParsed,
+        "Usage: monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>] [--preview]"
+      )
+    : stageParsed.stage
+
+  const configArg = parseImportArgs(args).configArg
   if (!configArg) {
     console.error(
-      "Usage: monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>]"
+      "Usage: monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>] [--preview]"
     )
+    return 1
+  }
+
+  if (stageParsed.preview && !stage) {
     return 1
   }
 

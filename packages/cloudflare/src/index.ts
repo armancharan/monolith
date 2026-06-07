@@ -52,6 +52,7 @@ export {
 } from "./read.js"
 export {
   snapshotToWranglerConfigObject,
+  writePreviewWranglerConfig,
   writeTempWranglerConfig
 } from "./wrangler-config.js"
 export {

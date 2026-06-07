@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { runDeploy, type RunWranglerDeploy } from "./deploy.js"
 import { runDestroy, type RunWranglerDelete } from "./destroy.js"
 import { evaluatePlan } from "./plan.js"
+import { parseStageArgs, requireStage } from "./stage.js"
 
 const DEFAULT_STAGE = "dev"
 const ASSERTIONS_DIR = ".monolith/test"
@@ -39,22 +40,18 @@ export interface TestAssertionFile {
   }>
 }
 
-function parseArgs(args: string[]): TestArgs {
-  const parsed: TestArgs = { stage: DEFAULT_STAGE, destroyAfter: false }
+function parseArgs(args: string[]): TestArgs & { preview: boolean } {
+  const stageParsed = parseStageArgs(args, { defaultStage: DEFAULT_STAGE })
+  const stage = requireStage(
+    stageParsed,
+    "Usage: monolith test [--stage <name>] [--preview] [--destroy-after]"
+  )
 
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === "--stage" && args[index + 1]) {
-      parsed.stage = args[index + 1]
-      index += 1
-      continue
-    }
-    if (arg === "--destroy-after") {
-      parsed.destroyAfter = true
-    }
+  return {
+    stage: stage ?? "",
+    preview: stageParsed.preview,
+    destroyAfter: args.includes("--destroy-after")
   }
-
-  return parsed
 }
 
 export async function loadAssertionFile(projectDir: string): Promise<TestAssertionFile | undefined> {
@@ -104,6 +101,9 @@ export async function runHttpSmokeCheck(
 
 export async function runTest(args: string[], options?: TestHarnessOptions): Promise<number> {
   const { stage, destroyAfter } = parseArgs(args)
+  if (!stage) {
+    return 1
+  }
   const projectDir = options?.projectDir ?? process.cwd()
   const httpFetch = options?.httpFetch ?? defaultHttpFetch
 

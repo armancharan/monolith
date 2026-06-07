@@ -3,7 +3,7 @@
 TypeScript infrastructure for Cloudflare teams who have outgrown `wrangler.toml` but do not want Terraform ceremony or Effect lock-in. Define Workers, D1, R2, KV, Queues, and Durable Objects in one typed `monolith.run.ts`, get compile-time binding safety, plan/preview/destroy lifecycle, and local dev that matches production.
 
 **Portfolio id:** Perch (experiment) · **M1 codename:** Monolith  
-**Status:** C1–C8 + destroy, test harness, create-monolith scaffold  
+**Status:** C1–C8 + destroy, test harness, create-monolith, preview stages  
 **Positioning:** B2D / agency devtools — reputation-first validation, not Vercel-adjacent hosting or Canva-style creative tooling.
 
 ## Quick start
@@ -50,6 +50,27 @@ monolith destroy --stage dev --auto-approve
 ```
 
 Plan prefers **`monolith.run.ts` binding declarations** merged with wrangler/import resource IDs when the run file is present; otherwise wrangler re-parse or import snapshot.
+
+### Preview stages (PR environments)
+
+Preview stages isolate state and Worker names per pull request:
+
+```bash
+monolith import wrangler.jsonc --stage pr-123   # or --preview with GITHUB_PR_NUMBER
+monolith plan --preview                           # MONOLITH_PREVIEW_ID or GITHUB_PR_NUMBER
+monolith deploy --stage pr-123 --auto-approve
+monolith deploy --preview --auto-approve          # same with env-based stage
+monolith destroy --preview --auto-approve
+```
+
+| Stage | State file | Worker name (deploy) |
+| --- | --- | --- |
+| `dev` | `.monolith/state/dev.json` | `my-worker` (from wrangler) |
+| `pr-123` | `.monolith/state/pr-123.json` | `my-worker-pr-123` (temp config) |
+
+Preview deploy writes `.monolith/wrangler.<stage>.jsonc` with a suffixed script name. URL is the standard `*.workers.dev` host for that script; add route prefixes in wrangler for custom domains.
+
+CI: copy [`templates/github-actions/monolith.yml`](./templates/github-actions/monolith.yml) — plan on PR, deploy production on push to `main`. Requires `CLOUDFLARE_API_TOKEN`; optional `MONOLITH_STAGE` secret (default `production`).
 
 ### Destroy (partial teardown)
 
@@ -118,10 +139,14 @@ See [docs/milestone-1.md](./docs/milestone-1.md#dogfood-repo-github) for `gh rep
 
 | Doc | Purpose |
 | --- | --- |
+| [docs/getting-started.md](./docs/getting-started.md) | Install, first deploy, preview stages |
+| [docs/commands.md](./docs/commands.md) | CLI command reference |
+| [docs/architecture.md](./docs/architecture.md) | Packages, reconcile loop diagram |
 | [docs/product-spec.md](./docs/product-spec.md) | Canonical product spec (DVI, competitive, GTM, M1 DAGs) |
 | [docs/milestone-1.md](./docs/milestone-1.md) | M1 working doc — verification checklist + friction log |
 | [docs/testing.md](./docs/testing.md) | Test pyramid and live-test gating |
 | [docs/audit-2026-06-07.md](./docs/audit-2026-06-07.md) | Strategic/technical audit summary + test pyramid |
+| [CHANGELOG.md](./CHANGELOG.md) | Release notes |
 
 ## Portfolio
 

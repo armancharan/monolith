@@ -1,9 +1,11 @@
-import { loadState, saveState, type MonolithState } from "@monolith/core"
+import { isPreviewStage, loadState, previewWorkerName, saveState, type MonolithState } from "@monolith/core"
+import { writePreviewWranglerConfig } from "@monolith/cloudflare"
 import { spawn } from "node:child_process"
 import { constants } from "node:fs"
 import { access } from "node:fs/promises"
 import { join } from "node:path"
 import { evaluatePlan } from "./plan.js"
+import { parseStageArgs, requireStage } from "./stage.js"
 
 const DEFAULT_STAGE = "dev"
 const WRANGLER_CONFIG_CANDIDATES = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
@@ -11,6 +13,7 @@ const WRANGLER_CONFIG_CANDIDATES = ["wrangler.jsonc", "wrangler.json", "wrangler
 export interface DeployArgs {
   stage: string
   autoApprove: boolean
+  preview: boolean
 }
 
 export interface WranglerDeployResult {
@@ -24,21 +27,20 @@ export type RunWranglerDeploy = (
 ) => Promise<WranglerDeployResult>
 
 function parseArgs(args: string[]): DeployArgs {
-  const parsed: DeployArgs = { stage: DEFAULT_STAGE, autoApprove: false }
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === "--stage" && args[index + 1]) {
-      parsed.stage = args[index + 1]
-      index += 1
-      continue
-    }
-    if (arg === "--auto-approve") {
-      parsed.autoApprove = true
-    }
+  const stageParsed = parseStageArgs(args, { defaultStage: DEFAULT_STAGE })
+  const stage = requireStage(
+    stageParsed,
+    "Usage: monolith deploy [--stage <name>] [--preview] [--auto-approve]"
+  )
+  if (!stage) {
+    return { stage: "", autoApprove: false, preview: stageParsed.preview }
   }
 
-  return parsed
+  return {
+    stage,
+    preview: stageParsed.preview,
+    autoApprove: args.includes("--auto-approve")
+  }
 }
 
 export function parseWorkerUrlFromWranglerOutput(output: string): string | undefined {
@@ -67,6 +69,28 @@ async function resolveWranglerConfigPath(
   }
 
   return undefined
+}
+
+async function resolveDeployConfigPath(
+  state: MonolithState,
+  stage: string,
+  projectDir: string
+): Promise<{ configPath?: string; previewWorkerName?: string }> {
+  const baseConfigPath = await resolveWranglerConfigPath(state, projectDir)
+  if (!baseConfigPath) {
+    return {}
+  }
+
+  if (!isPreviewStage(stage)) {
+    return { configPath: baseConfigPath }
+  }
+
+  const worker = state.resources.find((resource) => resource.kind === "worker")
+  const baseName = worker?.name ?? state.stackName
+  const previewName = previewWorkerName(baseName, stage)
+  const configPath = await writePreviewWranglerConfig(baseConfigPath, stage, projectDir)
+
+  return { configPath, previewWorkerName: previewName }
 }
 
 export async function runWranglerDeploy(
@@ -120,6 +144,9 @@ export async function runDeploy(
   options?: { runWrangler?: RunWranglerDeploy; projectDir?: string }
 ): Promise<number> {
   const { stage, autoApprove } = parseArgs(args)
+  if (!stage) {
+    return 1
+  }
   const projectDir = options?.projectDir ?? process.cwd()
   const deploy = options?.runWrangler ?? runWranglerDeploy
 
@@ -146,11 +173,18 @@ export async function runDeploy(
     }
   }
 
-  const configPath = await resolveWranglerConfigPath(current, projectDir)
+  const deployConfig = await resolveDeployConfigPath(current, stage, projectDir)
+  const configPath = deployConfig.configPath
 
   console.log(`Deploying stage "${stage}" via wrangler...`)
   if (configPath) {
     console.log(`  Config: ${configPath}`)
+  }
+  if (deployConfig.previewWorkerName) {
+    console.log(`  Preview worker: ${deployConfig.previewWorkerName}`)
+    console.log(
+      "  Note: preview uses a suffixed workers.dev name; add route prefix in wrangler for custom domains."
+    )
   }
 
   const result = await deploy(projectDir, configPath)

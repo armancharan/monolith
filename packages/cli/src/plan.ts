@@ -22,21 +22,22 @@ import { readFile, readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { emitTypegenFromImport } from "./typegen.js"
 import { loadDesiredFromStackFile, stackFileExists } from "./stack-file.js"
+import { parseStageArgs, requireStage } from "./stage.js"
 
 export type DesiredSource = "stack" | "wrangler" | "import"
 
 export type CloudPlanMode = "auto" | "on" | "off"
 
-function parseArgs(args: string[]): { stage?: string; cloud: CloudPlanMode } {
-  const parsed: { stage?: string; cloud: CloudPlanMode } = { cloud: "auto" }
+function parseArgs(args: string[]): { stage?: string; cloud: CloudPlanMode; preview: boolean } {
+  const stageParsed = parseStageArgs(args)
+  const parsed: { stage?: string; cloud: CloudPlanMode; preview: boolean } = {
+    stage: stageParsed.stage,
+    cloud: "auto",
+    preview: stageParsed.preview
+  }
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
-    if (arg === "--stage" && args[index + 1]) {
-      parsed.stage = args[index + 1]
-      index += 1
-      continue
-    }
     if (arg === "--cloud") {
       parsed.cloud = "on"
     }
@@ -266,9 +267,12 @@ export async function runPlan(
   args: string[],
   options?: { projectDir?: string }
 ): Promise<number> {
-  const { stage, cloud } = parseArgs(args)
+  const { stage: parsedStage, cloud, preview } = parseArgs(args)
+  const stage = requireStage(
+    { stage: parsedStage, preview },
+    "Usage: monolith plan --stage <name> [--preview] [--cloud] [--no-cloud]"
+  )
   if (!stage) {
-    console.error("Usage: monolith plan --stage <name> [--cloud] [--no-cloud]")
     return 1
   }
 

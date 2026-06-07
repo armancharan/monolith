@@ -1,10 +1,19 @@
 {
   "name": "@monolith/cli",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Monolith CLI — TypeScript IaC for Cloudflare Workers",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/armancharan/monolith.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "bin": {
     "monolith": "./bin/monolith.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "exports": {
     ".": {

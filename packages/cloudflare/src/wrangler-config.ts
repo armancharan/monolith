@@ -1,8 +1,8 @@
 import type { ImportSnapshot } from "@monolith/core"
-import { MONOLITH_DIR } from "@monolith/core"
-import { mkdir, writeFile } from "node:fs/promises"
+import { isPreviewStage, MONOLITH_DIR, previewWorkerName } from "@monolith/core"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import type { WranglerImportSnapshot } from "./wrangler-import.js"
+import { parseWranglerConfigText, toImportSnapshot, hashWranglerContent, type WranglerImportSnapshot } from "./wrangler-import.js"
 
 type SnapshotLike = ImportSnapshot | WranglerImportSnapshot
 
@@ -76,4 +76,26 @@ export async function writeTempWranglerConfig(
   await writeFile(absolutePath, `${JSON.stringify(config, null, 2)}\n`, "utf8")
 
   return relativePath
+}
+
+export async function writePreviewWranglerConfig(
+  baseConfigPath: string,
+  stage: string,
+  projectDir: string
+): Promise<string> {
+  if (!isPreviewStage(stage)) {
+    return baseConfigPath
+  }
+
+  const absolutePath = join(projectDir, baseConfigPath)
+  const content = await readFile(absolutePath, "utf8")
+  const parsed = parseWranglerConfigText(content, baseConfigPath)
+  const snapshot = toImportSnapshot(parsed, hashWranglerContent(content))
+  const previewSnapshot: WranglerImportSnapshot = {
+    ...snapshot,
+    workerName: previewWorkerName(snapshot.workerName, stage)
+  }
+
+  const filename = `wrangler.${stage}.jsonc`
+  return writeTempWranglerConfig(previewSnapshot, projectDir, filename)
 }

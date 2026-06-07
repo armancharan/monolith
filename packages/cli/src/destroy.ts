@@ -1,9 +1,10 @@
-import { clearState, formatPlan, loadState, type StateResource } from "@monolith/core"
+import { clearState, formatPlan, isPreviewStage, loadState, previewWorkerName, type StateResource } from "@monolith/core"
 import { spawn } from "node:child_process"
 import { constants } from "node:fs"
 import { access } from "node:fs/promises"
 import { join } from "node:path"
 import { evaluatePlan } from "./plan.js"
+import { parseStageArgs, requireStage } from "./stage.js"
 
 const DEFAULT_STAGE = "dev"
 const WRANGLER_CONFIG_CANDIDATES = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
@@ -11,6 +12,7 @@ const WRANGLER_CONFIG_CANDIDATES = ["wrangler.jsonc", "wrangler.json", "wrangler
 export interface DestroyArgs {
   stage: string
   autoApprove: boolean
+  preview: boolean
 }
 
 export interface WranglerDeleteResult {
@@ -25,21 +27,30 @@ export type RunWranglerDelete = (
 ) => Promise<WranglerDeleteResult>
 
 function parseArgs(args: string[]): DestroyArgs {
-  const parsed: DestroyArgs = { stage: DEFAULT_STAGE, autoApprove: false }
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === "--stage" && args[index + 1]) {
-      parsed.stage = args[index + 1]
-      index += 1
-      continue
-    }
-    if (arg === "--auto-approve") {
-      parsed.autoApprove = true
-    }
+  const stageParsed = parseStageArgs(args, { defaultStage: DEFAULT_STAGE })
+  const stage = requireStage(
+    stageParsed,
+    "Usage: monolith destroy [--stage <name>] [--preview] [--auto-approve]"
+  )
+  if (!stage) {
+    return { stage: "", autoApprove: false, preview: stageParsed.preview }
   }
 
-  return parsed
+  return {
+    stage,
+    preview: stageParsed.preview,
+    autoApprove: args.includes("--auto-approve")
+  }
+}
+
+export function resolveDestroyWorkerName(
+  workerName: string | undefined,
+  stage: string
+): string | undefined {
+  if (!workerName) {
+    return undefined
+  }
+  return previewWorkerName(workerName, stage)
 }
 
 export function findWorkerResource(resources: StateResource[]): StateResource | undefined {
@@ -130,6 +141,9 @@ export async function runDestroy(
   options?: { runWranglerDelete?: RunWranglerDelete; projectDir?: string }
 ): Promise<number> {
   const { stage, autoApprove } = parseArgs(args)
+  if (!stage) {
+    return 1
+  }
   const projectDir = options?.projectDir ?? process.cwd()
   const deleteWorker = options?.runWranglerDelete ?? runWranglerDelete
 
@@ -151,13 +165,17 @@ export async function runDestroy(
   }
 
   const worker = findWorkerResource(current.resources)
+  const workerName = resolveDestroyWorkerName(worker?.name, stage)
   const bindingLines = bindingResourceSummary(current.resources)
 
   if (!autoApprove) {
     console.error("")
     console.error(`Destroy requires --auto-approve for stage "${stage}".`)
-    if (worker?.name) {
-      console.error(`  Worker to delete: ${worker.name}`)
+    if (workerName) {
+      console.error(`  Worker to delete: ${workerName}`)
+      if (isPreviewStage(stage) && worker?.name && workerName !== worker.name) {
+        console.error(`  (preview suffix applied to base name "${worker.name}")`)
+      }
     }
     if (bindingLines.length > 0) {
       console.error("  Bindings retained in Cloudflare (D1/KV/R2/Queue/DO not deleted):")
@@ -168,7 +186,7 @@ export async function runDestroy(
     return 1
   }
 
-  if (!worker?.name) {
+  if (!workerName) {
     console.log(`No worker resource in state for stage "${stage}" — clearing local state only.`)
     const clearResult = await clearState(stage, projectDir)
     if (!clearResult.ok) {
@@ -182,12 +200,12 @@ export async function runDestroy(
   const configPath = await resolveWranglerConfigPath(current.wranglerConfigPath, projectDir)
 
   console.log("")
-  console.log(`Deleting worker "${worker.name}" via wrangler...`)
+  console.log(`Deleting worker "${workerName}" via wrangler...`)
   if (configPath) {
     console.log(`  Config: ${configPath}`)
   }
 
-  const result = await deleteWorker(projectDir, worker.name, configPath)
+  const result = await deleteWorker(projectDir, workerName, configPath)
   if (result.exitCode !== 0) {
     console.error(`Destroy failed: wrangler exited with code ${result.exitCode}`)
     return result.exitCode
@@ -201,7 +219,7 @@ export async function runDestroy(
 
   console.log("")
   console.log(`Destroy succeeded for stage "${stage}"`)
-  console.log(`  Worker "${worker.name}" removed from Cloudflare`)
+  console.log(`  Worker "${workerName}" removed from Cloudflare`)
   console.log(`  Local state cleared: .monolith/state/${stage}.json`)
   if (bindingLines.length > 0) {
     console.log("")

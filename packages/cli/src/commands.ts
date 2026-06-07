@@ -62,18 +62,21 @@ export function printHelp(): void {
 
 Usage:
   monolith init
-  monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>]
+  monolith import <wrangler.toml|wrangler.json|wrangler.jsonc> [--stage <name>] [--preview]
   monolith state init --stage <name> [--from .monolith/import/<hash>.json]
   monolith whoami [--account-id]
-  monolith plan --stage <name> [--cloud] [--no-cloud]
+  monolith plan [--stage <name>] [--preview] [--cloud] [--no-cloud]
   monolith typegen --stage <name>
-  monolith dev [--stage <name>]
-  monolith deploy [--stage <name>] [--auto-approve]
-  monolith destroy [--stage <name>] [--auto-approve]
-  monolith test [--stage <name>] [--destroy-after]
+  monolith dev [--stage <name>] [--preview]
+  monolith deploy [--stage <name>] [--preview] [--auto-approve]
+  monolith destroy [--stage <name>] [--preview] [--auto-approve]
+  monolith test [--stage <name>] [--preview] [--destroy-after]
 
 import reads wrangler config and writes .monolith/import/<hash>.json.
 Pass --stage on import to seed .monolith/state/<stage>.json from the snapshot.
+Preview stages use names like pr-123 (state: .monolith/state/pr-123.json).
+--preview resolves stage from MONOLITH_PREVIEW_ID or GITHUB_PR_NUMBER (e.g. pr-42).
+Preview deploy suffixes the worker name (my-worker-pr-123) via a temp wrangler config.
 import and plan also emit src/monolith.env.d.ts (or beside worker main) with MonolithEnv.
 plan merges partial cloud drift hints when Cloudflare auth is available (--cloud to require, --no-cloud to skip).
 dev runs \`npx wrangler dev\` using project wrangler config or a temp config from state/import.

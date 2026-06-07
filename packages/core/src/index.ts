@@ -1,4 +1,5 @@
 export { MONOLITH_DIR, IMPORT_DIR, STATE_DIR, importSnapshotPath, statePath } from "./paths.js"
+export { isPreviewStage, normalizePreviewStage, previewWorkerName } from "./stage.js"
 export {
   clearState,
   initStateFromImport,

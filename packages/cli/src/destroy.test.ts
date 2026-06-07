@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   bindingResourceSummary,
   findWorkerResource,
+  resolveDestroyWorkerName,
   runDestroy,
   type RunWranglerDelete
 } from "./destroy.js"
@@ -16,6 +17,13 @@ describe("findWorkerResource", () => {
       { id: "kv:KV", kind: "kv", binding: "KV" }
     ])
     expect(worker?.name).toBe("demo")
+  })
+})
+
+describe("resolveDestroyWorkerName", () => {
+  it("suffixes preview worker names for pr-* stages", () => {
+    expect(resolveDestroyWorkerName("demo-worker", "pr-99")).toBe("demo-worker-pr-99")
+    expect(resolveDestroyWorkerName("demo-worker", "dev")).toBe("demo-worker")
   })
 })
 

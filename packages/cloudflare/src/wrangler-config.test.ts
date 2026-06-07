@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest"
-import { snapshotToWranglerConfigObject } from "./wrangler-config.js"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
+import { afterEach, describe, expect, it } from "vitest"
+import { snapshotToWranglerConfigObject, writePreviewWranglerConfig } from "./wrangler-config.js"
 
 describe("snapshotToWranglerConfigObject", () => {
   it("builds wrangler config from import snapshot", () => {
@@ -31,5 +34,31 @@ describe("snapshotToWranglerConfigObject", () => {
       ],
       kv_namespaces: [{ binding: "KV", id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }]
     })
+  })
+})
+
+describe("writePreviewWranglerConfig", () => {
+  const tempDirs: string[] = []
+
+  afterEach(async () => {
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  })
+
+  it("writes temp config with suffixed worker name", async () => {
+    const projectDir = join(tmpdir(), `monolith-preview-config-${Date.now()}`)
+    tempDirs.push(projectDir)
+    await mkdir(projectDir, { recursive: true })
+    await writeFile(
+      join(projectDir, "wrangler.jsonc"),
+      `{ "name": "demo-worker", "main": "src/index.ts" }\n`
+    )
+
+    const configPath = await writePreviewWranglerConfig("wrangler.jsonc", "pr-5", projectDir)
+    expect(configPath).toBe(".monolith/wrangler.pr-5.jsonc")
+
+    const written = JSON.parse(
+      await readFile(join(projectDir, ".monolith", "wrangler.pr-5.jsonc"), "utf8")
+    )
+    expect(written.name).toBe("demo-worker-pr-5")
   })
 })

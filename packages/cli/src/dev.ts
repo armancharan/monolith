@@ -5,6 +5,7 @@ import { constants } from "node:fs"
 import { access, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { resolveDesiredState } from "./plan.js"
+import { parseStageArgs, requireStage } from "./stage.js"
 
 const DEFAULT_STAGE = "dev"
 const WRANGLER_CONFIG_CANDIDATES = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
@@ -23,18 +24,17 @@ export type RunWranglerDev = (
   configPath: string
 ) => Promise<WranglerDevResult>
 
-function parseArgs(args: string[]): DevArgs {
-  const parsed: DevArgs = { stage: DEFAULT_STAGE }
+function parseArgs(args: string[]): DevArgs & { preview: boolean } {
+  const stageParsed = parseStageArgs(args, { defaultStage: DEFAULT_STAGE })
+  const stage = requireStage(
+    stageParsed,
+    "Usage: monolith dev [--stage <name>] [--preview]"
+  )
 
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === "--stage" && args[index + 1]) {
-      parsed.stage = args[index + 1]
-      index += 1
-    }
+  return {
+    stage: stage ?? "",
+    preview: stageParsed.preview
   }
-
-  return parsed
 }
 
 async function resolveWranglerConfigPath(
@@ -204,6 +204,9 @@ export async function runDev(
   options?: { runWrangler?: RunWranglerDev; projectDir?: string }
 ): Promise<number> {
   const { stage } = parseArgs(args)
+  if (!stage) {
+    return 1
+  }
   const projectDir = options?.projectDir ?? process.cwd()
   const dev = options?.runWrangler ?? runWranglerDev
 
