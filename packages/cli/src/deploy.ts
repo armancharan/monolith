@@ -21,6 +21,10 @@ import { spawn } from "node:child_process"
 import { constants } from "node:fs"
 import { access } from "node:fs/promises"
 import { join } from "node:path"
+import {
+  ensurePlaceholderResources,
+  type RunWranglerCommand
+} from "./ensure-resources.js"
 import { evaluatePlan } from "./plan.js"
 import { parseStageArgs, requireStage } from "./stage.js"
 
@@ -31,6 +35,22 @@ export interface DeployArgs {
   stage: string
   autoApprove: boolean
   preview: boolean
+  ensureResources: boolean
+}
+
+export interface ExecuteDeployOptions {
+  stage: string
+  projectDir: string
+  autoApprove?: boolean
+  ensureResources?: boolean
+  runWrangler?: RunWranglerDeploy
+  runWranglerCommand?: RunWranglerCommand
+}
+
+export interface ExecuteDeployResult {
+  exitCode: number
+  workerUrl?: string
+  deployedAt?: string
 }
 
 export interface WranglerDeployResult {
@@ -50,13 +70,19 @@ function parseArgs(args: string[]): DeployArgs {
     "Usage: monolith deploy [--stage <name>] [--preview] [--auto-approve]"
   )
   if (!stage) {
-    return { stage: "", autoApprove: false, preview: stageParsed.preview }
+    return {
+      stage: "",
+      autoApprove: false,
+      preview: stageParsed.preview,
+      ensureResources: args.includes("--ensure-resources")
+    }
   }
 
   return {
     stage,
     preview: stageParsed.preview,
-    autoApprove: args.includes("--auto-approve")
+    autoApprove: args.includes("--auto-approve"),
+    ensureResources: args.includes("--ensure-resources")
   }
 }
 
@@ -182,31 +208,30 @@ export async function runWranglerDeploy(
   })
 }
 
-export async function runDeploy(
-  args: string[],
-  options?: { runWrangler?: RunWranglerDeploy; projectDir?: string }
-): Promise<number> {
-  const { stage, autoApprove } = parseArgs(args)
-  if (!stage) {
-    return 1
-  }
-  const projectDir = options?.projectDir ?? process.cwd()
-  const deploy = options?.runWrangler ?? runWranglerDeploy
+export async function executeDeploy(options: ExecuteDeployOptions): Promise<ExecuteDeployResult> {
+  const {
+    stage,
+    projectDir,
+    autoApprove = false,
+    ensureResources = false,
+    runWrangler = runWranglerDeploy,
+    runWranglerCommand
+  } = options
 
   const stateResult = await loadState(stage, projectDir)
   if (!stateResult.ok) {
     console.error(stateResult.error.message)
     console.error("Run `monolith import ... --stage <name>` or `monolith state init` first.")
-    return 1
+    return { exitCode: 1 }
   }
 
-  const current = stateResult.value
+  let current = stateResult.value
 
   if (!autoApprove) {
     const planEval = await evaluatePlan(stage, projectDir)
     if (!planEval.ok) {
       console.error(planEval.message)
-      return planEval.exitCode
+      return { exitCode: planEval.exitCode }
     }
 
     const hasPending = planEval.value.pending.hasChanges
@@ -220,8 +245,24 @@ export async function runDeploy(
         console.error(`Cloud drift detected for stage "${stage}" (cloud vs desired).`)
       }
       console.error("Review with `monolith plan --stage " + stage + "` or deploy with --auto-approve.")
-      return 1
+      return { exitCode: 1 }
     }
+  }
+
+  const baseConfigPath = await resolveWranglerConfigPath(current, projectDir)
+  if (baseConfigPath) {
+    const ensureResult = await ensurePlaceholderResources({
+      stage,
+      projectDir,
+      configPath: baseConfigPath,
+      ensureResources,
+      runWrangler: runWranglerCommand
+    })
+    if (!ensureResult.ok) {
+      console.error(ensureResult.message)
+      return { exitCode: 1 }
+    }
+    current = ensureResult.state
   }
 
   const deployConfig = await resolveDeployConfigPath(current, stage, projectDir)
@@ -266,11 +307,11 @@ export async function runDeploy(
 
   const result =
     parsedConfig
-      ? await deployWithDoMigration(projectDir, configPath, deploy, parsedConfig)
-      : await deploy(projectDir, configPath)
+      ? await deployWithDoMigration(projectDir, configPath, runWrangler, parsedConfig)
+      : await runWrangler(projectDir, configPath)
   if (result.exitCode !== 0) {
     console.error(`Deploy failed: wrangler exited with code ${result.exitCode}`)
-    return result.exitCode
+    return { exitCode: result.exitCode }
   }
 
   const deployedAt = new Date().toISOString()
@@ -285,7 +326,7 @@ export async function runDeploy(
   const saveResult = await saveState(stage, nextState, projectDir)
   if (!saveResult.ok) {
     console.error(saveResult.error.message)
-    return 1
+    return { exitCode: 1 }
   }
 
   console.log("")
@@ -296,5 +337,31 @@ export async function runDeploy(
   console.log(`  State updated: .monolith/state/${stage}.json`)
   await maybePushStateAfterDeploy(stage, nextState, projectDir)
 
-  return 0
+  return { exitCode: 0, workerUrl, deployedAt }
+}
+
+export async function runDeploy(
+  args: string[],
+  options?: {
+    runWrangler?: RunWranglerDeploy
+    runWranglerCommand?: RunWranglerCommand
+    projectDir?: string
+  }
+): Promise<number> {
+  const { stage, autoApprove, ensureResources } = parseArgs(args)
+  if (!stage) {
+    return 1
+  }
+  const projectDir = options?.projectDir ?? process.cwd()
+
+  const result = await executeDeploy({
+    stage,
+    projectDir,
+    autoApprove,
+    ensureResources,
+    runWrangler: options?.runWrangler,
+    runWranglerCommand: options?.runWranglerCommand
+  })
+
+  return result.exitCode
 }

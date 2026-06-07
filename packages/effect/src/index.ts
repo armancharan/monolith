@@ -1,5 +1,6 @@
+import { executeDeploy } from "@monolith/cli/deploy"
 import { CloudflareClient } from "@monolith/cloudflare"
-import { loadState, planState, saveState, StateError, type MonolithState } from "@monolith/core"
+import { loadState, planState, StateError } from "@monolith/core"
 import { Context, Data, Effect, Layer } from "effect"
 
 export class MonolithStateError extends Data.TaggedError("MonolithStateError")<{
@@ -53,8 +54,8 @@ export class MonolithEffect extends Context.Tag("MonolithEffect")<
     ) => Effect.Effect<MonolithPlanResult, MonolithStateError>
     readonly deploy: (
       stage: string,
-      state: MonolithState,
-      projectDir?: string
+      projectDir?: string,
+      options?: { autoApprove?: boolean }
     ) => Effect.Effect<MonolithDeployResult, MonolithStateError>
   }
 >() {}
@@ -83,24 +84,21 @@ export const MonolithEffectLive = Layer.succeed(MonolithEffect, {
             })
     }),
 
-  deploy: (stage, state, projectDir = process.cwd()) =>
+  deploy: (stage, projectDir = process.cwd(), options) =>
     Effect.tryPromise({
       try: async () => {
-        const deployedAt = new Date().toISOString()
-        const next: MonolithState = {
-          ...state,
-          updatedAt: deployedAt,
-          deployedAt,
-          workerUrl: state.workerUrl
-        }
-        const saved = await saveState(stage, next, projectDir)
-        if (!saved.ok) {
-          throw saved.error
+        const result = await executeDeploy({
+          stage,
+          projectDir,
+          autoApprove: options?.autoApprove ?? true
+        })
+        if (result.exitCode !== 0) {
+          throw new Error(`Deploy failed with exit code ${result.exitCode}`)
         }
         return {
           stage,
-          workerUrl: next.workerUrl,
-          deployedAt
+          workerUrl: result.workerUrl,
+          deployedAt: result.deployedAt ?? new Date().toISOString()
         }
       },
       catch: (cause) =>

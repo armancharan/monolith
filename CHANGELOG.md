@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/publishing.md` npm + GitHub checklist
   - CI live-smoke gated on `vars.MONOLITH_LIVE_TESTS == '1'`
 
+- **Phase D — Publication + deferred work**
+  - Public GitHub repo: https://github.com/armancharan/monolith
+  - `monolith deploy --ensure-resources` — auto-creates D1/KV when wrangler has `REPLACE_*` placeholder IDs via wrangler CLI
+  - `@monolith/effect` `deploy` wired to shared `executeDeploy` from `@monolith/cli/deploy`
+  - Integration test for route assertions in test harness
+  - `@monolith/cli` publish prep: `files`, `./deploy` export, test artifacts excluded from dist
+
 ### Changed
 
 - `monolith deploy` auto-pushes state to R2 when remote backend configured

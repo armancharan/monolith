@@ -2,12 +2,14 @@
 
 Use this before the first public npm release and GitHub launch.
 
+**Public repo:** https://github.com/armancharan/monolith
+
 ## Pre-publish
 
-- [ ] `pnpm build && pnpm typecheck && pnpm test && pnpm test:integration` all pass
-- [ ] CHANGELOG updated for release version
-- [ ] README feature list matches shipped commands
-- [ ] `docs/commands.md` and `docs/architecture.md` current
+- [x] `pnpm build && pnpm typecheck && pnpm test && pnpm test:integration` all pass
+- [x] CHANGELOG updated for release version
+- [x] README feature list matches shipped commands
+- [x] `docs/commands.md` and `docs/architecture.md` current
 - [ ] Dogfood repo (`monolith-m1-dogfood`) validates import → plan → deploy → test
 
 ## npm packages
@@ -23,25 +25,23 @@ Publish order (dependencies first):
 
 ```bash
 # From repo root after version bump
+cd packages/cli && npm publish --access public
+# or workspace-wide:
 pnpm -r publish --access public --no-git-checks
 ```
 
-Requires `NPM_TOKEN` with publish rights to `@monolith` scope (or chosen scope).
+Requires npm login with publish rights to `@monolith` scope (or chosen scope).
 
-**Do not publish without token** — document-only if blocked.
+**Status (2026-06-07):** `npm whoami` not authenticated on this machine — publish documented only. Dry-run for `@monolith/cli@0.2.0` succeeded (tarball ~45 kB, public access).
 
 ## GitHub public repo
 
 ```bash
-gh repo view armancharan/monolith   # verify remote exists
-git remote -v                       # ensure origin points at GitHub
+gh repo view armancharan/monolith   # https://github.com/armancharan/monolith
+git remote -v                       # origin → https://github.com/armancharan/monolith.git
 ```
 
-If repo is private, flip visibility in GitHub settings or:
-
-```bash
-gh repo edit armancharan/monolith --visibility public
-```
+Created 2026-06-07 as public repo `armancharan/monolith`; `main` pushed with full history.
 
 ## Post-publish
 

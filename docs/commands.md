@@ -47,10 +47,10 @@ Diff desired state (from `monolith.run.ts`, wrangler, or import) vs `.monolith/s
 ## deploy
 
 ```bash
-monolith deploy [--stage <name>] [--preview] [--auto-approve]
+monolith deploy [--stage <name>] [--preview] [--auto-approve] [--ensure-resources]
 ```
 
-Runs `npx wrangler deploy`. Blocks when plan has pending changes unless `--auto-approve`. Preview stages use a temp wrangler config with suffixed Worker name. Logs binding summary (shared vs isolated on preview).
+Runs `npx wrangler deploy`. Blocks when plan has pending changes unless `--auto-approve`. With `--ensure-resources` (or automatically when wrangler has `REPLACE_*` placeholder IDs), creates D1/KV via `wrangler d1 create` / `wrangler kv namespace create` before deploy and updates config + state. Preview stages use a temp wrangler config with suffixed Worker name. Logs binding summary (shared vs isolated on preview).
 
 ## destroy
 
@@ -128,7 +128,7 @@ export default createHonoWorker(app)
 
 ### @monolith/effect
 
-Effect-native adapter — `MonolithEffect` service with `plan` / `deploy` as Effects, plus `CloudflareClientLive` layer. Does not replace the CLI; use in Effect apps that orchestrate Monolith operations.
+Effect-native adapter — `MonolithEffect` service with `plan` / `deploy` as Effects (deploy calls shared `executeDeploy` from `@monolith/cli/deploy`), plus `CloudflareClientLive` layer. Does not replace the CLI; use in Effect apps that orchestrate Monolith operations.
 
 ## Environment variables
 

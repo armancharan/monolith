@@ -24,6 +24,7 @@
     "effect": "^3.0.0"
   },
   "dependencies": {
+    "@monolith/cli": "workspace:*",
     "@monolith/cloudflare": "workspace:*",
     "@monolith/core": "workspace:*"
   },

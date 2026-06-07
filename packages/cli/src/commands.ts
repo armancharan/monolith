@@ -79,7 +79,7 @@ Usage:
   monolith plan [--stage <name>] [--preview] [--cloud] [--no-cloud]
   monolith typegen --stage <name>
   monolith dev [--stage <name>] [--preview] [--watch]
-  monolith deploy [--stage <name>] [--preview] [--auto-approve]
+  monolith deploy [--stage <name>] [--preview] [--auto-approve] [--ensure-resources]
   monolith destroy [--stage <name>] [--preview] [--auto-approve]
   monolith test [--stage <name>] [--preview] [--destroy-after]
 
@@ -94,6 +94,7 @@ plan merges partial cloud drift hints when Cloudflare auth is available (--cloud
 dev runs \`npx wrangler dev\` using project wrangler config or a temp config from state/import.
 deploy runs \`npx wrangler deploy\` in the project directory (default stage: dev).
 deploy checks plan first; pass --auto-approve to skip when changes are pending.
+deploy with --ensure-resources (or auto when wrangler has REPLACE_* IDs) runs wrangler d1/kv create before deploy.
 destroy runs plan, then \`npx wrangler delete <worker>\` when --auto-approve is set.
 destroy clears local stage state; D1/KV/R2 buckets are NOT deleted from Cloudflare (bindings only).
 test runs plan guard, deploy (--auto-approve), route assertions (.monolith/test/assertions.json), optional HTTP smoke, optional --destroy-after teardown.
